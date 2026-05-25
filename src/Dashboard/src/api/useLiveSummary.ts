@@ -27,7 +27,7 @@ export const useLiveSummary = () => {
       }
     }
     load()
-    const id = window.setInterval(load, 1000)
+    const id = window.setInterval(load, 5000)
     return () => {
       cancelled = true
       window.clearInterval(id)

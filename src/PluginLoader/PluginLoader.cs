@@ -73,6 +73,15 @@ namespace CoiTelemetry.PluginLoader
             Reload();
         }
 
+        public override void Dispose()
+        {
+            _logger.Info("Disposing");
+            
+            _current?.Stop();
+            _current?.Dispose();
+            _current = null;
+        }
+
         private void UpdateOnSimulationTick()
         {
             if (File.Exists(_path))
@@ -99,6 +108,7 @@ namespace CoiTelemetry.PluginLoader
             try
             {
                 _logger.Info("Reloading...");
+                _current?.Stop();
                 _current?.Dispose();
                 _current = null;
 

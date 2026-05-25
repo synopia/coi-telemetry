@@ -64,6 +64,7 @@
         <Compile Include="Collecting\MetricMath.cs" />
         <Compile Include="Collecting\MetricsCollector.cs" />
         <Compile Include="Collecting\ProductFlowMetrics.cs" />
+        <Compile Include="Collecting\VehicleJobMetric.cs" />
         <Compile Include="Collecting\VehicleMetrics.cs" />
         <Compile Include="Contracts\Dtos\EntityInfo.cs" />
         <Compile Include="Contracts\Dtos\ExportSummary.cs" />

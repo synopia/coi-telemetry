@@ -8,6 +8,8 @@ using Mafi;
 using Mafi.Core.Entities.Dynamic;
 using Mafi.Core.Vehicles;
 using Mafi.Core.Vehicles.Excavators;
+using Mafi.Core.Vehicles.Jobs;
+using Mafi.Core.Vehicles.Trucks;
 
 namespace CoiTelemetry.RealMod.Collecting;
 
@@ -16,6 +18,7 @@ public sealed class VehicleMetrics
     private readonly EntityTracker _tracker;
     private readonly IProductFlowMetrics _productFlowMetrics;
     private readonly Vehicle _vehicle;
+    private readonly IVehicleJobMetric? _jobMetric;
     
     private readonly EntityId _vehicleId;
     private int _observedTicks;
@@ -44,6 +47,10 @@ public sealed class VehicleMetrics
         _productFlowMetrics = productFlowMetrics;
         _vehicle = vehicle;
         _vehicleId = _tracker.Vehicle(vehicle);
+        if (vehicle is Truck truck)
+        {
+            _jobMetric = new TruckJobMetric(tracker, truck, this, productFlowMetrics);
+        }
 
         _totalDistance = vehicle.LifetimeDistanceTraveled.RawValue;
         _lastFuel = _vehicle.FuelTank.ValueOrNull?.RemainingDuration ?? Duration.Zero;
@@ -76,7 +83,7 @@ public sealed class VehicleMetrics
                 _cargoDelta = currentCargo - _lastCargoAmount;
                 _lastCargoAmount = currentCargo;
             }
-            state = GetVehicleState();
+            state = _jobMetric?.Process(_vehicle) ?? GetVehicleState(); 
         }
         var fuelTank = _vehicle.FuelTank.ValueOrNull;
         if (fuelTank is not null)
@@ -229,11 +236,6 @@ public sealed class VehicleMetrics
     private VehicleObservedState GetVehicleState()
     {
 
-        if (_vehicle.NeedsJob)
-        {
-            return VehicleObservedState.Idle;
-        }
-
         if (_vehicle.CannotWorkDueToLowFuel)
         {
             return VehicleObservedState.NoFuel;
@@ -248,13 +250,17 @@ public sealed class VehicleMetrics
         {
             return VehicleObservedState.Broke;
         }
-
-
+        
         if (_vehicle.IsDriving)
         {
             return _lastCargoAmount>0 ? VehicleObservedState.MovingLoaded : VehicleObservedState.MovingEmpty;
         }
 
+        if (_vehicle.NeedsJob)
+        {
+            return VehicleObservedState.Idle;
+        }
+        
         if (_cargoDelta > 0)
         {
             return VehicleObservedState.Loading;

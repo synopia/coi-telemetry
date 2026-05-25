@@ -1,7 +1,8 @@
 import Card, { CardContent, CardHeader, CardTitle } from '@/components/ui/Card'
 import Breadcrumbs from '@/components/layout/Breadcrumbs'
-import { ResponsiveContainer } from 'recharts'
 import { useLiveSummary } from '@/api/useLiveSummary.ts'
+import { BottleneckHeatmapChart, toBottleneckRows } from '@/pages/BottleneckHeatmapChart.tsx'
+import { NetAmountChart } from '@/pages/NetAmountChart.tsx'
 
 const WorstMachines = () => {
   const { summary, error } = useLiveSummary()
@@ -13,7 +14,7 @@ const WorstMachines = () => {
         (a.uptimePercent.notEnoughInput ?? 0) +
         (a.uptimePercent.outputFull ?? 0)
     )
-    .slice(0, 10)
+    .slice(0, 5)
 
   const fmt = (n?: number) => (!n ? 0 : (100 * n).toFixed(1))
   return (
@@ -24,22 +25,41 @@ const WorstMachines = () => {
       <CardContent>
         <table className="w-full">
           <thead>
-            <tr>
-              <th>Machine</th>
-              <th>Running</th>
-              <th>Input Shortage</th>
-              <th>Output Full</th>
-              <th>Blocker</th>
+            <tr className="border-b border-secondary-200 dark:border-secondary-700">
+              <th className="text-left py-3 px-4 text-sm font-semibold text-secondary-700 dark:text-secondary-300">
+                Machine
+              </th>
+              <th className="text-left py-3 px-4 text-sm font-semibold text-secondary-700 dark:text-secondary-300">
+                Running
+              </th>
+              <th className="text-left py-3 px-4 text-sm font-semibold text-secondary-700 dark:text-secondary-300">
+                Input Shortage
+              </th>
+              <th className="text-left py-3 px-4 text-sm font-semibold text-secondary-700 dark:text-secondary-300">
+                Output Full
+              </th>
+              <th className="text-left py-3 px-4 text-sm font-semibold text-secondary-700 dark:text-secondary-300">
+                Blocker
+              </th>
             </tr>
           </thead>
           <tbody>
             {worstMachines.map((machine, index) => (
-              <tr key={index}>
-                <td>{machine.machineId}</td>
-                <td>{fmt(machine.uptimePercent.working)}%</td>
-                <td>{fmt(machine.uptimePercent.notEnoughInput)}%</td>
-                <td>{fmt(machine.uptimePercent.outputFull)}%</td>
-                <td>{machine.primaryBlocker}</td>
+              <tr
+                key={index}
+                className="border-b border-secondary-100 dark:border-secondary-800 hover:bg-secondary-50 dark:hover:bg-secondary-800/50 transition-colors"
+              >
+                <td className="py-3 px-4">{machine.machineId}</td>
+                <td className="py-3 px-4">
+                  {fmt(machine.uptimePercent.working)}%
+                </td>
+                <td className="py-3 px-4">
+                  {fmt(machine.uptimePercent.notEnoughInput)}%
+                </td>
+                <td className="py-3 px-4">
+                  {fmt(machine.uptimePercent.outputFull)}%
+                </td>
+                <td className="py-3 px-4">{machine.primaryBlocker}</td>
               </tr>
             ))}
           </tbody>
@@ -50,6 +70,8 @@ const WorstMachines = () => {
 }
 
 export default function Dashboard() {
+  const { summary, error } = useLiveSummary()
+
   return (
     <div>
       <Breadcrumbs items={[{ name: 'Dashboard' }]} />
@@ -95,7 +117,10 @@ export default function Dashboard() {
 
       {/* Charts */}
       <div className="grid grid-cols-1 lg:grid-cols-1 gap-6 mb-6">
-        <WorstMachines />
+        {summary && (
+          <BottleneckHeatmapChart rows={toBottleneckRows(summary, '1m')} />
+        )}
+        {/*<WorstMachines />*/}
       </div>
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
         {/* Revenue Chart */}
@@ -104,35 +129,7 @@ export default function Dashboard() {
             <CardTitle>Revenue Overview</CardTitle>
           </CardHeader>
           <CardContent>
-            <ResponsiveContainer width="100%" height={300}>
-              {/*
-              <AreaChart data={revenueData}>
-                <defs>
-                  <linearGradient id="colorRevenue" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="5%" stopColor="#3b82f6" stopOpacity={0.3} />
-                    <stop offset="95%" stopColor="#3b82f6" stopOpacity={0} />
-                  </linearGradient>
-                </defs>
-                <CartesianGrid strokeDasharray="3 3" className="stroke-secondary-200 dark:stroke-secondary-700" />
-                <XAxis dataKey="name" className="text-xs" />
-                <YAxis className="text-xs" />
-                <Tooltip
-                  contentStyle={{
-                    backgroundColor: 'rgba(255, 255, 255, 0.95)',
-                    border: '1px solid #e2e8f0',
-                    borderRadius: '8px',
-                  }}
-                />
-                <Area
-                  type="monotone"
-                  dataKey="revenue"
-                  stroke="#3b82f6"
-                  fillOpacity={1}
-                  fill="url(#colorRevenue)"
-                />
-              </AreaChart>
-*/}
-            </ResponsiveContainer>
+            {summary&&<NetAmountChart summary={summary}/>}
           </CardContent>
         </Card>
 
@@ -142,25 +139,6 @@ export default function Dashboard() {
             <CardTitle>Profit vs Expenses</CardTitle>
           </CardHeader>
           <CardContent>
-            <ResponsiveContainer width="100%" height={300}>
-              {/*
-              <BarChart data={revenueData}>
-                <CartesianGrid strokeDasharray="3 3" className="stroke-secondary-200 dark:stroke-secondary-700" />
-                <XAxis dataKey="name" className="text-xs" />
-                <YAxis className="text-xs" />
-                <Tooltip
-                  contentStyle={{
-                    backgroundColor: 'rgba(255, 255, 255, 0.95)',
-                    border: '1px solid #e2e8f0',
-                    borderRadius: '8px',
-                  }}
-                />
-                <Legend />
-                <Bar dataKey="profit" fill="#2563eb" radius={[8, 8, 0, 0]} />
-                <Bar dataKey="expenses" fill="#64748b" radius={[8, 8, 0, 0]} />
-              </BarChart>
-*/}
-            </ResponsiveContainer>
           </CardContent>
         </Card>
       </div>
@@ -173,40 +151,6 @@ export default function Dashboard() {
             <CardTitle>Recent Orders</CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="space-y-4">
-              {/*{recentOrders.map((order) => (
-                <div
-                  key={order.id}
-                  className="flex items-center justify-between py-3 border-b border-secondary-200 dark:border-secondary-700 last:border-0"
-                >
-                  <div className="flex-1">
-                    <p className="font-medium text-secondary-900 dark:text-white">
-                      {order.customer}
-                    </p>
-                    <p className="text-sm text-secondary-600 dark:text-secondary-400">
-                      {order.product}
-                    </p>
-                  </div>
-                  <div className="text-right">
-                    <p className="font-medium text-secondary-900 dark:text-white">
-                      {formatCurrency(order.amount)}
-                    </p>
-                    <Badge
-                      variant={
-                        order.status === 'completed'
-                          ? 'success'
-                          : order.status === 'pending'
-                            ? 'warning'
-                            : 'primary'
-                      }
-                      size="sm"
-                    >
-                      {order.status}
-                    </Badge>
-                  </div>
-                </div>
-              ))}*/}
-            </div>
           </CardContent>
         </Card>
 
@@ -217,42 +161,6 @@ export default function Dashboard() {
           </CardHeader>
           <CardContent>
             <div className="space-y-4">
-              {/*
-              {topProducts.map((product) => (
-                <div
-                  key={product.id}
-                  className="flex items-center justify-between py-3 border-b border-secondary-200 dark:border-secondary-700 last:border-0"
-                >
-                  <div className="flex-1">
-                    <p className="font-medium text-secondary-900 dark:text-white">
-                      {product.name}
-                    </p>
-                    <p className="text-sm text-secondary-600 dark:text-secondary-400">
-                      {product.sales} sales
-                    </p>
-                  </div>
-                  <div className="text-right">
-                    <p className="font-medium text-secondary-900 dark:text-white">
-                      {formatCurrency(product.revenue)}
-                    </p>
-                    <div
-                      className={`flex items-center justify-end gap-1 text-sm font-medium ${
-                        product.trend >= 0
-                          ? 'text-success-700 dark:text-success-400'
-                          : 'text-danger-700 dark:text-danger-400'
-                      }`}
-                    >
-                      {product.trend >= 0 ? (
-                        <ArrowUpRight className="w-4 h-4" />
-                      ) : (
-                        <ArrowDownRight className="w-4 h-4" />
-                      )}
-                      <span>{Math.abs(product.trend)}%</span>
-                    </div>
-                  </div>
-                </div>
-              ))}
-*/}
             </div>
           </CardContent>
         </Card>

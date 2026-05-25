@@ -9,6 +9,8 @@ export type LiveSummary = {
 export type ExportSummary = {
   meta: SummaryMeta
   machines: MachineSummaryRow[]
+  productFlow: ProductFlowSummaryRow[]
+  vehicles: VehicleSummaryRow[]
 }
 
 export type SummaryMeta = {
@@ -21,6 +23,9 @@ export type SummaryMeta = {
 
 export const MachineObservedStates = ['none', 'broken', 'paused', 'notEnoughWorkers', 'notEnoughPower', 'notEnoughComputing', 'notEnoughInput', 'invalidPlacement', 'outputFull', 'noRecipes', 'working'] as const
 export type MachineObservedState = typeof MachineObservedStates[number]
+
+export const VehicleObservedStates = ['none', 'broke', 'idle', 'movingEmpty', 'movingLoaded', 'loading', 'unloading', "waiting", "working","stuck", "noFuel"] as const
+export type VehicleObservedState = typeof VehicleObservedStates[number]
 
 export type UptimePercent<T extends string> ={
   [K in T]: number
@@ -53,4 +58,51 @@ export type ProductBufferSummary = {
   stored: number
   capacity: number
   fillPercent: number
+}
+
+export type VehicleSummaryRow = {
+  vehicleId: string
+  observedTicks: number
+  assignedTo?: string
+
+  uptimePercent: UptimePercent<VehicleObservedState>
+  uptimeTicks: UptimePercent<VehicleObservedState>
+
+  emptyTravelDistance: number
+  loadedTravelDistance: number
+
+  deliveriesCompleted: number
+  fuelConsumed: number
+
+  delivered: ProductFlowSummary[]
+  produced: ProductFlowSummary[]
+  consumed: ProductFlowSummary[]
+
+  primaryBlocker: VehicleObservedState
+}
+
+export type ProductFlowSummaryRow = {
+  productId: string
+  observedTicks: number
+  latestStored: number
+  latestCapacity: number
+  latestFillPercent: number
+
+  minStored: number
+  maxStored: number
+  avgStored: number
+
+  producedAmount: number
+  consumedAmount: number
+  importedAmount: number
+  exportedAmount: number
+  minedAmount: number
+  dumpedAmount: number
+  lostAmount: number
+  netAmount: number
+  producedPerMinute: number
+  netPerMinute: number
+  estimatedMinutesUntilEmpty?: number
+  estimatedMinutesUntilFull?: number
+
 }
