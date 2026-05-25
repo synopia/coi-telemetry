@@ -1,4 +1,5 @@
 using System;
+using System.Threading;
 using CoiTelemetry.Abstractions;
 using CoiTelemetry.RealMod.Collecting;
 using Mafi;
@@ -29,6 +30,7 @@ namespace CoiTelemetry.RealMod.Runtime
         {
             try
             {
+                _context.Logger.Info(Thread.CurrentThread.Name??"Unknown");
                 _scheduler.OnSimulationTick();
             }catch (Exception e)
             {

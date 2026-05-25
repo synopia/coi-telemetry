@@ -21,11 +21,8 @@ export type SummaryMeta = {
 }
 
 
-export const MachineObservedStates = ['none', 'broken', 'paused', 'notEnoughWorkers', 'notEnoughPower', 'notEnoughComputing', 'notEnoughInput', 'invalidPlacement', 'outputFull', 'noRecipes', 'working'] as const
-export type MachineObservedState = typeof MachineObservedStates[number]
-
-export const VehicleObservedStates = ['none', 'broke', 'idle', 'movingEmpty', 'movingLoaded', 'loading', 'unloading', "waiting", "working","stuck", "noFuel"] as const
-export type VehicleObservedState = typeof VehicleObservedStates[number]
+export const ObservedStates = ['unknown', 'working', 'waiting', 'notEnoughWorkers', 'notEnoughPower', 'notEnoughComputing', 'notEnoughMaintenance', 'notEnoughInput', 'outputFull'] as const
+export type ObservedState = typeof ObservedStates[number]
 
 export type UptimePercent<T extends string> ={
   [K in T]: number
@@ -36,8 +33,8 @@ export type MachineSummaryRow={
   recipeId?: string
   observedTicks:number
 
-  uptimePercent: UptimePercent<MachineObservedState>
-  uptimeTicks: UptimePercent<MachineObservedState>
+  uptimePercent: UptimePercent<ObservedState>
+  uptimeTicks: UptimePercent<ObservedState>
 
   inputs: ProductFlowSummary[]
   outputs: ProductFlowSummary[]
@@ -45,7 +42,7 @@ export type MachineSummaryRow={
   inputBuffers: ProductBufferSummary[]
   outputBuffers: ProductBufferSummary[]
 
-  primaryBlocker: MachineObservedState
+  primaryBlocker: ObservedState
 }
 
 export type ProductFlowSummary = {
@@ -65,8 +62,8 @@ export type VehicleSummaryRow = {
   observedTicks: number
   assignedTo?: string
 
-  uptimePercent: UptimePercent<VehicleObservedState>
-  uptimeTicks: UptimePercent<VehicleObservedState>
+  uptimePercent: UptimePercent<ObservedState>
+  uptimeTicks: UptimePercent<ObservedState>
 
   emptyTravelDistance: number
   loadedTravelDistance: number
@@ -78,7 +75,7 @@ export type VehicleSummaryRow = {
   produced: ProductFlowSummary[]
   consumed: ProductFlowSummary[]
 
-  primaryBlocker: VehicleObservedState
+  primaryBlocker: ObservedState
 }
 
 export type ProductFlowSummaryRow = {

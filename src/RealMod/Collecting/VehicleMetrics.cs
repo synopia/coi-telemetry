@@ -1,5 +1,6 @@
 using System.Collections.Generic;
 using System.Linq;
+using CoiTelemetry.Abstractions;
 using CoiTelemetry.RealMod.Contracts.Dtos;
 using CoiTelemetry.RealMod.Contracts.Enums;
 using CoiTelemetry.RealMod.Contracts.Ids;
@@ -9,6 +10,7 @@ using Mafi.Core.Entities.Dynamic;
 using Mafi.Core.Vehicles;
 using Mafi.Core.Vehicles.Excavators;
 using Mafi.Core.Vehicles.Jobs;
+using Mafi.Core.Vehicles.TreeHarvesters;
 using Mafi.Core.Vehicles.Trucks;
 
 namespace CoiTelemetry.RealMod.Collecting;
@@ -18,14 +20,13 @@ public sealed class VehicleMetrics
     private readonly EntityTracker _tracker;
     private readonly IProductFlowMetrics _productFlowMetrics;
     private readonly Vehicle _vehicle;
-    private readonly IVehicleJobMetric? _jobMetric;
     
     private readonly EntityId _vehicleId;
     private int _observedTicks;
-    private VehicleObservedState _observedState;
-    private readonly Dictionary<VehicleObservedState, int> _stateCounters = new();
+    private ObservedState _observedState;
+    private readonly Dictionary<ObservedState, int> _stateCounters = new();
 
-    private EntityId? _assignedTo;
+    private EntityId? _assignedToId;
     private int _deliveriesCompleted;
     private double _fuelConsumed;
     private double _distanceEmpty;
@@ -40,17 +41,14 @@ public sealed class VehicleMetrics
     private readonly Dictionary<ProductId, double> _producedByProduct = new();
     private readonly Dictionary<ProductId, double> _consumedByProduct = new();
     private readonly Dictionary<string, int> _jobsInfo = new();
-    
-    public VehicleMetrics(EntityTracker tracker, IProductFlowMetrics productFlowMetrics, Vehicle vehicle)
+    private readonly IModContext _context;
+    public VehicleMetrics(IModContext context, EntityTracker tracker, IProductFlowMetrics productFlowMetrics, Vehicle vehicle)
     {
+        _context = context;
         _tracker = tracker;
         _productFlowMetrics = productFlowMetrics;
         _vehicle = vehicle;
         _vehicleId = _tracker.Vehicle(vehicle);
-        if (vehicle is Truck truck)
-        {
-            _jobMetric = new TruckJobMetric(tracker, truck, this, productFlowMetrics);
-        }
 
         _totalDistance = vehicle.LifetimeDistanceTraveled.RawValue;
         _lastFuel = _vehicle.FuelTank.ValueOrNull?.RemainingDuration ?? Duration.Zero;
@@ -59,12 +57,49 @@ public sealed class VehicleMetrics
     public void ObserveState()
     {
         _observedTicks++;
-        _assignedTo = _tracker.Entity(_vehicle.AssignedTo.ValueOrNull);
-        VehicleObservedState state;
+        var assignedTo = _vehicle.AssignedTo.ValueOrNull;
+        _assignedToId = _tracker.Entity(assignedTo);
+
+        var goal = _vehicle.NavigationGoal.ValueOrNull?.GoalName;
+        if (_vehicle is IVehicleForCargoJob vehicleForCargoJob)
+        {
+            var currentCargo = vehicleForCargoJob.Cargo.TotalQuantity.Value;
+            _cargoDelta = currentCargo - _lastCargoAmount;
+            _lastCargoAmount = currentCargo;
+            _observedState = GetVehicleState();
+            if (goal?.Value == "Small excavator" )
+            {
+                _observedState = ObservedState.Working;
+            }
+        } else if (_vehicle is Excavator excavator)
+        {
+            _lastCargoAmount = excavator.Cargo.TotalQuantity.Value;
+            _observedState = GetExcavatorObservedState(excavator);
+        } else if (_vehicle is TreeHarvester treeHarvester)
+        {
+            _lastCargoAmount = treeHarvester.Cargo.Quantity.Value;
+            _context.Logger.Info($"Tree harvester: {treeHarvester.State}");
+            switch (treeHarvester.State)
+            {
+                case TreeHarvesterState.TreeIsUp:
+                    _observedState = ObservedState.OutputFull;
+                    break;
+                case TreeHarvesterState.Idle:
+                    _observedState = ObservedState.NotEnoughInput;
+                    break;
+                default:
+                    _observedState = ObservedState.Working;
+                    break;
+            }
+        }
+
+        
+        /*
+        ObservedState state;
         if (_vehicle is Excavator excavator)
         {
             state = GetExcavatorObservedState(excavator);
-            if (state != _observedState && state == VehicleObservedState.Unloading)
+            if (state != _observedState && state == ObservedState.Unloading)
             {
                 var cargo = excavator.Cargo.GetEnumerator();
                 while (cargo.MoveNext())
@@ -85,6 +120,7 @@ public sealed class VehicleMetrics
             }
             state = _jobMetric?.Process(_vehicle) ?? GetVehicleState(); 
         }
+        */
         var fuelTank = _vehicle.FuelTank.ValueOrNull;
         if (fuelTank is not null)
         {
@@ -107,10 +143,9 @@ public sealed class VehicleMetrics
         var totalDistance = _vehicle.LifetimeDistanceTraveled.RawValue;
         AddMovedDistance(totalDistance-_totalDistance, _lastCargoAmount>0);
         
-        _stateCounters.TryGetValue(state, out var ticks);
-        _stateCounters[state] = ticks + 1;
+        _stateCounters.TryGetValue(_observedState, out var ticks);
+        _stateCounters[_observedState] = ticks + 1;
         _totalDistance = totalDistance;
-        _observedState = state;
     }
 
     public void ResetWindow()
@@ -127,10 +162,14 @@ public sealed class VehicleMetrics
         _producedByProduct.Clear();
         _consumedByProduct.Clear();
     }
-    private VehicleObservedState GetPrimaryBlocker()
+    private ObservedState GetPrimaryBlocker()
     {
+        if (_stateCounters.Count == 0)
+        {
+            return ObservedState.Unknown;
+        }
         var best = _stateCounters.OrderByDescending(x => x.Value).First();
-        return best.Value <= 0 ? VehicleObservedState.None : best.Key;
+        return best.Value <= 0 ? ObservedState.Unknown : best.Key;
     }
     public VehicleSummaryRow BuildSummaryRow()
     {
@@ -160,7 +199,7 @@ public sealed class VehicleMetrics
             .ToArray();
         return new VehicleSummaryRow(
             VehicleId: _vehicleId.Value,
-            AssignedTo: _assignedTo?.Value,
+            AssignedTo: _assignedToId?.Value,
             ObservedTicks: _observedTicks,
             UptimePercent:MetricMath.Percent(_stateCounters, _observedTicks),
             UptimeTicks: _stateCounters.ToDictionary(x => x.Key, x => x.Value),
@@ -233,64 +272,63 @@ public sealed class VehicleMetrics
         dict.TryGetValue(productId, out var current);
         dict[productId] = current + amount;
     }
-    private VehicleObservedState GetVehicleState()
+    private ObservedState GetVehicleState()
     {
-
         if (_vehicle.CannotWorkDueToLowFuel)
         {
-            return VehicleObservedState.NoFuel;
+            return ObservedState.NotEnoughPower;
         }
 
         if (_vehicle.IsStuck)
         {
-            return VehicleObservedState.Stuck;
+            return ObservedState.Waiting;
         }
 
         if (!_vehicle.Maintenance.CanWork())
         {
-            return VehicleObservedState.Broke;
+            return ObservedState.NotEnoughMaintenance;
         }
         
         if (_vehicle.IsDriving)
         {
-            return _lastCargoAmount>0 ? VehicleObservedState.MovingLoaded : VehicleObservedState.MovingEmpty;
+            return ObservedState.Working;
         }
 
         if (_vehicle.NeedsJob)
         {
-            return VehicleObservedState.Idle;
+            return ObservedState.Waiting;
         }
         
-        if (_cargoDelta > 0)
+        if (_lastCargoAmount > 0)
         {
-            return VehicleObservedState.Loading;
+            return ObservedState.OutputFull;
         }
-        if (_cargoDelta < 0)
+        if (_lastCargoAmount==0)
         {
-            return VehicleObservedState.Unloading;
+            return ObservedState.NotEnoughInput;
         }
 
-        return VehicleObservedState.Waiting;
+        return ObservedState.Waiting;
     }
     
-    private static VehicleObservedState GetExcavatorObservedState(Excavator excavator)
+    private static ObservedState GetExcavatorObservedState(Excavator excavator)
     {
         switch (excavator.State)
         {
             case ExcavatorState.Idle:
-                return VehicleObservedState.Idle;
+                return ObservedState.Waiting;
             case ExcavatorState.DoJob:
-                return VehicleObservedState.Working;
+                return ObservedState.Working;
             case ExcavatorState.LoadTruck:
-                return VehicleObservedState.Unloading;
+                return ObservedState.Working;
             case ExcavatorState.WaitingForShovel:
-                return VehicleObservedState.Loading;
+                return ObservedState.Working;
             case ExcavatorState.WaitingForTruck:
-                return VehicleObservedState.Waiting;
+                return ObservedState.OutputFull;
             case ExcavatorState.GettingUnstuck:
-                return VehicleObservedState.Stuck;
+                return ObservedState.Waiting;
             default:
-                return VehicleObservedState.None;
+                return ObservedState.Unknown;
         }
     }
 }

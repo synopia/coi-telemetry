@@ -77,14 +77,14 @@ public static class SummaryCombiner
             .OrderBy(x=>x.ProductId)
             .ToArray();
 
-        Dictionary<MachineObservedState, int> uptimeTicks = new();
+        Dictionary<ObservedState, int> uptimeTicks = new();
 
-        foreach (var value in Enum.GetValues(typeof(MachineObservedState)))
+        foreach (var value in Enum.GetValues(typeof(ObservedState)))
         {
-            var sum = Sum(m => m.UptimeTicks.TryGetValue((MachineObservedState)value, out var v) ? v : 0);
+            var sum = Sum(m => m.UptimeTicks.TryGetValue((ObservedState)value, out var v) ? v : 0);
             if (sum != 0)
             {
-                uptimeTicks[(MachineObservedState)value] = sum;
+                uptimeTicks[(ObservedState)value] = sum;
             }
         }
 
@@ -102,7 +102,7 @@ public static class SummaryCombiner
             Outputs: outputs,
             InputBuffers: latest.InputBuffers,
             OutputBuffers: latest.OutputBuffers,
-            PrimaryBlocker: primaryBlocker.Value<=0 ? MachineObservedState.None : primaryBlocker.Key
+            PrimaryBlocker: primaryBlocker.Value<=0 ? ObservedState.Unknown : primaryBlocker.Key
             );
     }
 
@@ -177,14 +177,14 @@ public static class SummaryCombiner
 
         var deliveries = rows.Sum(x=>x.Vehicle.DeliveriesCompleted);
         var fuel = rows.Sum(x=>x.Vehicle.FuelConsumed);
-        Dictionary<VehicleObservedState, int> uptimeTicks = new();
+        Dictionary<ObservedState, int> uptimeTicks = new();
 
-        foreach (var value in Enum.GetValues(typeof(VehicleObservedState)))
+        foreach (var value in Enum.GetValues(typeof(ObservedState)))
         {
-            var sum = Sum(m => m.UptimeTicks.TryGetValue((VehicleObservedState)value, out var v) ? v : 0);
+            var sum = Sum(m => m.UptimeTicks.TryGetValue((ObservedState)value, out var v) ? v : 0);
             if (sum != 0)
             { 
-                uptimeTicks[(VehicleObservedState)value] = sum;
+                uptimeTicks[(ObservedState)value] = sum;
             }
         }
         Dictionary<string, int> jobs = new();
@@ -207,7 +207,7 @@ public static class SummaryCombiner
             Delivered: delivered,
             Produced: produced,
             Consumed: consumed,
-            PrimaryBlocker: primaryBlocker.Value<=0 ? VehicleObservedState.None : primaryBlocker.Key,
+            PrimaryBlocker: primaryBlocker.Value<=0 ? ObservedState.Unknown : primaryBlocker.Key,
             UptimePercent: MetricMath.Percent(uptimeTicks, totalTicks),
             UptimeTicks: uptimeTicks,
             Jobs: jobs,

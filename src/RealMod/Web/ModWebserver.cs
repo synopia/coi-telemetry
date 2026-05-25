@@ -73,7 +73,13 @@ public class ModWebserver:IDisposable
             return;
         }
 
-        switch (request.Url?.AbsolutePath)
+        var path = request.Url?.AbsolutePath;
+        if (path?.StartsWith("/api/entity/") == true)
+        {
+            _liveData.RequestEntity = path.Substring(12);
+            WriteJson(response, $"{{\"c\":\"{_liveData.ResponseEntity??""}\"}}");
+        }
+        switch (path)
         {
             case "/api/health":
                 WriteJson(response, "{\"ok\":true}");

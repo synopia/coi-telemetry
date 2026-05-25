@@ -10,8 +10,8 @@ public sealed record MachineSummaryRow(
     string? RecipeId,
     int ObservedTicks,
 
-    IReadOnlyDictionary<MachineObservedState, double> UptimePercent,
-    IReadOnlyDictionary<MachineObservedState, int> UptimeTicks,
+    IReadOnlyDictionary<ObservedState, double> UptimePercent,
+    IReadOnlyDictionary<ObservedState, int> UptimeTicks,
 
     IReadOnlyList<ProductFlowSummary> Inputs,
     IReadOnlyList<ProductFlowSummary> Outputs,
@@ -20,5 +20,5 @@ public sealed record MachineSummaryRow(
     IReadOnlyList<ProductBufferSummary> OutputBuffers,
 
     [property:JsonConverter(typeof(StringEnumConverter))]
-    MachineObservedState PrimaryBlocker
+    ObservedState PrimaryBlocker
 );

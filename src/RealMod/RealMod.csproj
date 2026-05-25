@@ -64,7 +64,6 @@
         <Compile Include="Collecting\MetricMath.cs" />
         <Compile Include="Collecting\MetricsCollector.cs" />
         <Compile Include="Collecting\ProductFlowMetrics.cs" />
-        <Compile Include="Collecting\VehicleJobMetric.cs" />
         <Compile Include="Collecting\VehicleMetrics.cs" />
         <Compile Include="Contracts\Dtos\EntityInfo.cs" />
         <Compile Include="Contracts\Dtos\ExportSummary.cs" />
@@ -75,8 +74,7 @@
         <Compile Include="Contracts\Dtos\ProductFlowSummaryRow.cs" />
         <Compile Include="Contracts\Dtos\ProductStorage.cs" />
         <Compile Include="Contracts\Dtos\VehicleSummaryRow.cs" />
-        <Compile Include="Contracts\Enums\MachineObservedState.cs" />
-        <Compile Include="Contracts\Enums\VehicleObservedState.cs" />
+        <Compile Include="Contracts\Enums\ObservedState.cs" />
         <Compile Include="Contracts\Ids\EntityId.cs" />
         <Compile Include="Contracts\Ids\ProductId.cs" />
         <Compile Include="Contracts\Ids\RecipeId.cs" />
@@ -84,6 +82,7 @@
         <Compile Include="Mapping\ExportIdMapper.cs" />
         <Compile Include="Runtime\ExportScheduler.cs" />
         <Compile Include="Runtime\ModRuntime.cs" />
+        <Compile Include="Runtime\ObjectInspector.cs" />
         <Compile Include="TelemetryMod.cs" />
         <Compile Include="Properties\AssemblyInfo.cs"/>
         <Compile Include="Web\LiveDataHub.cs" />

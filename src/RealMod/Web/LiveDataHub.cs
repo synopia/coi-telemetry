@@ -10,6 +10,8 @@ public sealed class LiveDataHub
 {
     private string _latestSummaryJson = "{}";
     private long _version;
+    public string? RequestEntity { get; set; }
+    public string? ResponseEntity { get; set; }
 
     private static readonly JsonSerializerSettings PrettySettings = new()
     {

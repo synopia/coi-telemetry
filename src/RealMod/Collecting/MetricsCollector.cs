@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using CoiTelemetry.Abstractions;
 using CoiTelemetry.RealMod.Contracts.Dtos;
 using CoiTelemetry.RealMod.Contracts.Ids;
 using CoiTelemetry.RealMod.Mapping;
@@ -21,11 +22,12 @@ public sealed class MetricsCollector:IProductFlowMetrics
     private readonly Dictionary<EntityId, MachineMetrics> _machines = new();
     private readonly Dictionary<EntityId, VehicleMetrics> _vehicles = new();
     private readonly Dictionary<ProductId, ProductFlowMetrics> _products = new();
-    
+    private readonly IModContext _context; 
     private int _windowObservedTicks;
     
-    public MetricsCollector(IEntitiesManager entitiesManager, ISimLoopEvents events)
+    public MetricsCollector(IModContext context, IEntitiesManager entitiesManager, ISimLoopEvents events)
     {
+        _context = context;
         _entitiesManager = entitiesManager;
         _events = events;
         _tracker = new EntityTracker(new ExportIdMapper());
@@ -161,7 +163,7 @@ public sealed class MetricsCollector:IProductFlowMetrics
         var id = _tracker.Vehicle(vehicle);
         if (!_vehicles.TryGetValue(id, out var metrics))
         {
-            metrics = new VehicleMetrics(_tracker, this, vehicle);
+            metrics = new VehicleMetrics(_context,_tracker, this, vehicle);
             _vehicles.Add(id, metrics);
         }
 

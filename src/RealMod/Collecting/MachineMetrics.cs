@@ -18,9 +18,10 @@ public sealed class MachineMetrics
     
     private readonly EntityId _machineId;
     private int _observedTicks;
-    private MachineObservedState _observedState;
+    private ObservedState _observedState;
     private RecipeId? _recipeId;
-    private readonly Dictionary<MachineObservedState, int> _stateCounters = new();
+    
+    private readonly Dictionary<ObservedState, int> _stateCounters = new();
     private readonly Dictionary<ProductId, double> _inputConsumed = new();
     private readonly Dictionary<ProductId, double> _outputProduced = new();
     
@@ -125,45 +126,46 @@ public sealed class MachineMetrics
     public void ResetWindow()
     {
         _observedTicks = 0;
-        _observedState = MachineObservedState.None;
+        _observedState = ObservedState.Unknown;
 
         _stateCounters.Clear();
 
         _inputConsumed.Clear();
         _outputProduced.Clear();
     }
-    private MachineObservedState GetState()
+    private ObservedState GetState()
     {
         switch (_machine.CurrentState)
         {
             case Machine.State.Paused:
-                return MachineObservedState.Paused;
             case Machine.State.Broken:
-                return MachineObservedState.Broken;
-            case Machine.State.NotEnoughWorkers:
-                return MachineObservedState.NotEnoughWorkers;
-            case Machine.State.NotEnoughPower:
-                return MachineObservedState.NotEnoughPower;
-            case Machine.State.NotEnoughComputing:
-                return MachineObservedState.NotEnoughComputing;
-            case Machine.State.NotEnoughInput:
-                return MachineObservedState.NotEnoughInput;
             case Machine.State.InvalidPlacement:
-                return MachineObservedState.InvalidPlacement;
-            case Machine.State.OutputFull:
-                return MachineObservedState.OutputFull;
             case Machine.State.NoRecipes:
-                return MachineObservedState.NoRecipes;
+                return ObservedState.Waiting;
+            case Machine.State.NotEnoughWorkers:
+                return ObservedState.NotEnoughWorkers;
+            case Machine.State.NotEnoughPower:
+                return ObservedState.NotEnoughPower;
+            case Machine.State.NotEnoughComputing:
+                return ObservedState.NotEnoughComputing;
+            case Machine.State.NotEnoughInput:
+                return ObservedState.NotEnoughInput;
+            case Machine.State.OutputFull:
+                return ObservedState.OutputFull;
             case Machine.State.Working:
-                return MachineObservedState.Working;
+                return ObservedState.Working;
             default:
-                return MachineObservedState.None;
+                return ObservedState.Unknown;
         }
     }
-    private MachineObservedState GetPrimaryBlocker()
+    private ObservedState GetPrimaryBlocker()
     {
+        if (_stateCounters.Count == 0)
+        {
+            return ObservedState.Unknown;
+        }
         var best = _stateCounters.OrderByDescending(x => x.Value).First();
-        return best.Value <= 0 ? MachineObservedState.None : best.Key;
+        return best.Value <= 0 ? ObservedState.Unknown : best.Key;
     }
     private void AddInputConsumed(ProductId productId, double amount)
     {

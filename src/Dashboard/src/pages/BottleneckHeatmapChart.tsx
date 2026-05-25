@@ -1,17 +1,5 @@
 
 
-  // 'none',
-  // 'broken',
-  // 'paused',
-  // 'notEnoughWorkers',
-  // 'notEnoughPower',
-  // 'notEnoughComputing',
-  // 'notEnoughInput',
-  // 'invalidPlacement',
-  // 'outputFull',
-  // 'noRecipes',
-  // 'working',
-
   import EChartsReact from 'echarts-for-react'
   import { LiveSummary } from '@/api/types.ts'
 
@@ -21,29 +9,26 @@
     kind: 'machine' | 'vehicle'
 
     workingPercent?: number
-    notEnoughInputPercent?: number
-    outputFullPercent?: number
+    waitingPercent?: number
     notEnoughWorkersPercent?: number
     notEnoughPowerPercent?: number
-    brokenPercent?: number
-    noFuelPercent?: number
-    waitingPercent?: number
-    stuckPercent?: number
-    idlePercent?: number
+    notEnoughComputingPercent?: number
+    notEnoughMaintenancePercent?: number
+    notEnoughInputPercent?: number
+    outputFullPercent?: number
+
     primaryBlocker?: string
   }
 
   const columns = [
-    "Run",
-    "Input",
-    "Output",
-    "Workers",
-    "Power",
-    "Maint",
-    "Fuel",
-    "Wait",
-    "Stuck",
-    "Idle"
+    'Run',
+    'Wait',
+    'Workers',
+    'Power',
+    'Compute',
+    'Maint',
+    'Input',
+    'Output',
   ] as const
 
   function value(row: BottleneckRow, column: (typeof columns)[number]) {
@@ -56,18 +41,14 @@
         return row.outputFullPercent ?? 0
       case "Workers":
         return row.notEnoughWorkersPercent ?? 0
+      case "Compute":
+        return row.notEnoughComputingPercent ?? 0
       case "Power":
         return row.notEnoughPowerPercent ?? 0
       case "Maint":
-        return row.brokenPercent ?? 0
-      case "Fuel":
-        return row.noFuelPercent ?? 0
+        return row.notEnoughMaintenancePercent ?? 0
       case "Wait":
         return row.waitingPercent ?? 0
-      case "Stuck":
-        return row.stuckPercent ?? 0
-      case "Idle":
-        return row.idlePercent ?? 0
     }
   }
 
@@ -77,11 +58,10 @@ function bottleneckScore(row: BottleneckRow) {
     (row.outputFullPercent??0)+
       (row.notEnoughWorkersPercent??0)*1.2 +
       (row.notEnoughPowerPercent??0)*1.5 +
-      (row.brokenPercent??0)*1.2 +
-      (row.noFuelPercent??0)*1.2 +
-      (row.waitingPercent??0)*0.8 +
-      (row.stuckPercent??0)*2.0 +
-      (row.idlePercent??0)*0.3
+      (row.notEnoughComputingPercent??0)*1.1 +
+      (row.notEnoughMaintenancePercent??0)*1.2 +
+      (row.waitingPercent??0)*0.8
+
   )
 }
 
@@ -91,12 +71,14 @@ export function toBottleneckRows(summary:LiveSummary, window:"10s"|"1m"|"5m"|"10
     id: m.machineId,
     label: m.machineId,
     kind: 'machine',
-    workingPercent: m.uptimePercent.working ,
-    brokenPercent: m.uptimePercent.broken ,
+    workingPercent: m.uptimePercent.working,
     notEnoughInputPercent: m.uptimePercent.notEnoughInput ,
     outputFullPercent: m.uptimePercent.outputFull ,
     notEnoughWorkersPercent: m.uptimePercent.notEnoughWorkers ,
     notEnoughPowerPercent: m.uptimePercent.notEnoughPower ,
+    notEnoughComputingPercent: m.uptimePercent.notEnoughComputing ,
+    notEnoughMaintenancePercent: m.uptimePercent.notEnoughMaintenance ,
+    waitingPercent: m.uptimePercent.waiting ,
 
     primaryBlocker: m.primaryBlocker,
   }))
@@ -105,11 +87,13 @@ export function toBottleneckRows(summary:LiveSummary, window:"10s"|"1m"|"5m"|"10
     label: v.vehicleId,
     kind: 'vehicle',
     workingPercent: v.uptimePercent.working ,
-    brokenPercent: v.uptimePercent.broke ,
-    noFuelPercent: v.uptimePercent.noFuel,
-    waitingPercent: v.uptimePercent.waiting,
-    stuckPercent: v.uptimePercent.stuck ,
-    idlePercent: v.uptimePercent.idle ,
+    outputFullPercent: v.uptimePercent.outputFull ,
+    notEnoughWorkersPercent: v.uptimePercent.notEnoughWorkers ,
+    notEnoughPowerPercent: v.uptimePercent.notEnoughPower ,
+    notEnoughComputingPercent: v.uptimePercent.notEnoughComputing ,
+    notEnoughMaintenancePercent: v.uptimePercent.notEnoughMaintenance ,
+    notEnoughInputPercent: v.uptimePercent.notEnoughInput ,
+    waitingPercent: v.uptimePercent.waiting ,
 
     primaryBlocker: v.primaryBlocker,
   }))
