@@ -1,0 +1,119 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project ToolsVersion="4.0" DefaultTargets="Build" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+    <Import Project="$(MSBuildExtensionsPath)\$(MSBuildToolsVersion)\Microsoft.Common.props"
+            Condition="Exists('$(MSBuildExtensionsPath)\$(MSBuildToolsVersion)\Microsoft.Common.props')"/>
+    <PropertyGroup>
+        <Configuration Condition=" '$(Configuration)' == '' ">Debug</Configuration>
+        <Platform Condition=" '$(Platform)' == '' ">AnyCPU</Platform>
+        <ProjectGuid>{6B00C53B-94C0-4F9E-8474-AC31861330DD}</ProjectGuid>
+        <OutputType>Library</OutputType>
+        <AppDesignerFolder>Properties</AppDesignerFolder>
+        <RootNamespace>CoiTelemetry.RealMod</RootNamespace>
+        <AssemblyName>CoiTelemetry.RealMod</AssemblyName>
+        <TargetFrameworkVersion>v4.8</TargetFrameworkVersion>
+        <FileAlignment>512</FileAlignment>
+        <LangVersion>10</LangVersion>
+        <Nullable>enable</Nullable>
+    </PropertyGroup>
+    <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Debug|AnyCPU' ">
+        <PlatformTarget>AnyCPU</PlatformTarget>
+        <DebugSymbols>true</DebugSymbols>
+        <DebugType>full</DebugType>
+        <Optimize>false</Optimize>
+        <OutputPath>bin\Debug\</OutputPath>
+        <DefineConstants>DEBUG;TRACE</DefineConstants>
+        <ErrorReport>prompt</ErrorReport>
+        <WarningLevel>4</WarningLevel>
+    </PropertyGroup>
+    <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Release|AnyCPU' ">
+        <PlatformTarget>AnyCPU</PlatformTarget>
+        <DebugType>pdbonly</DebugType>
+        <Optimize>true</Optimize>
+        <OutputPath>bin\Release\</OutputPath>
+        <DefineConstants>TRACE</DefineConstants>
+        <ErrorReport>prompt</ErrorReport>
+        <WarningLevel>4</WarningLevel>
+    </PropertyGroup>
+    <ItemGroup>
+        <Reference Include="Newtonsoft.Json, Version=13.0.0.0, Culture=neutral, PublicKeyToken=30ad4fe6b2a6aeed, processorArchitecture=MSIL">
+          <HintPath>..\..\packages\Newtonsoft.Json.13.0.4\lib\net45\Newtonsoft.Json.dll</HintPath>
+        </Reference>
+        <Reference Include="System"/>
+        <Reference Include="System.Core"/>
+        <Reference Include="System.Data"/>
+        <Reference Include="System.Xml"/>
+    </ItemGroup>
+    <ItemGroup>
+        <Reference Include="Mafi">
+            <HintPath>$(COI_ROOT)\Captain of Industry_Data\Managed\Mafi.dll</HintPath>
+            <Private>false</Private>
+        </Reference>
+        <Reference Include="Mafi.Core">
+            <HintPath>$(COI_ROOT)\Captain of Industry_Data\Managed\Mafi.Core.dll</HintPath>
+            <Private>false</Private>
+        </Reference>
+        <Reference Include="Mafi.Unity">
+            <HintPath>$(COI_ROOT)\Captain of Industry_Data\Managed\Mafi.Unity.dll</HintPath>
+            <Private>false</Private>
+        </Reference>
+    </ItemGroup>
+    <ItemGroup>
+        <Compile Include="Aggregation\RollingSummaryAggregator.cs" />
+        <Compile Include="Aggregation\SummaryCombiner.cs" />
+        <Compile Include="Collecting\MachineMetrics.cs" />
+        <Compile Include="Collecting\MetricMath.cs" />
+        <Compile Include="Collecting\MetricsCollector.cs" />
+        <Compile Include="Collecting\ProductFlowMetrics.cs" />
+        <Compile Include="Collecting\VehicleMetrics.cs" />
+        <Compile Include="Contracts\Dtos\EntityInfo.cs" />
+        <Compile Include="Contracts\Dtos\ExportSummary.cs" />
+        <Compile Include="Contracts\Dtos\LiveSummary.cs" />
+        <Compile Include="Contracts\Dtos\MachineSummaryRow.cs" />
+        <Compile Include="Contracts\Dtos\ProductBufferSummary.cs" />
+        <Compile Include="Contracts\Dtos\ProductFlowSummary.cs" />
+        <Compile Include="Contracts\Dtos\ProductFlowSummaryRow.cs" />
+        <Compile Include="Contracts\Dtos\ProductStorage.cs" />
+        <Compile Include="Contracts\Dtos\VehicleSummaryRow.cs" />
+        <Compile Include="Contracts\Enums\MachineObservedState.cs" />
+        <Compile Include="Contracts\Enums\VehicleObservedState.cs" />
+        <Compile Include="Contracts\Ids\EntityId.cs" />
+        <Compile Include="Contracts\Ids\ProductId.cs" />
+        <Compile Include="Contracts\Ids\RecipeId.cs" />
+        <Compile Include="Mapping\EntityTracker.cs" />
+        <Compile Include="Mapping\ExportIdMapper.cs" />
+        <Compile Include="Runtime\ExportScheduler.cs" />
+        <Compile Include="Runtime\ModRuntime.cs" />
+        <Compile Include="TelemetryMod.cs" />
+        <Compile Include="Properties\AssemblyInfo.cs"/>
+        <Compile Include="Web\LiveDataHub.cs" />
+        <Compile Include="Web\ModWebserver.cs" />
+    </ItemGroup>
+    <ItemGroup>
+      <ProjectReference Include="..\Abstractions\Abstractions.csproj">
+        <Project>{b328fe80-0c35-4790-975e-caecb339f8cf}</Project>
+        <Name>Abstractions</Name>
+      </ProjectReference>
+    </ItemGroup>
+    <ItemGroup>
+      <None Include="packages.config" />
+    </ItemGroup>
+    <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets"/>
+    <Target Name="CopyToCoIMods" AfterTargets="Build" Condition="'$(Configuration)' == 'Debug'">
+        <PropertyGroup>
+            <ModDeployDir>$(APPDATA)\Captain of Industry\Mods\CoiTelemetry</ModDeployDir>
+        </PropertyGroup>
+        <MakeDir Directories="$(ModDeployDir)"/>
+
+        <Copy SourceFiles="$(TargetPath)"
+              DestinationFolder="$(ModDeployDir)" />
+
+        <Copy SourceFiles="$(TargetDir)$(TargetName).pdb"
+              DestinationFolder="$(ModDeployDir)"
+              Condition="Exists('$(TargetDir)$(TargetName).pdb')" />
+        
+        <Copy SourceFiles="$(TargetDir)Newtonsoft.Json.dll"
+              DestinationFolder="$(ModDeployDir)"
+              Condition="Exists('$(TargetDir)Newtonsoft.Json.dll')" />
+    </Target>
+
+</Project>

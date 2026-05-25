@@ -1,0 +1,9 @@
+{
+  "id": "CoiTelemetry",
+  "version": "0.0.1",
+  "primary_dlls": ["Newtonsoft.Json.dll","CoiTelemetry.Abstractions.dll","CoiTelemetry.PluginLoader.dll"],
+  "non_locking_dll_load": true,
+  "can_add_to_saved_game": true,
+  "can_remove_from_saved_game": true,
+  "primary_mod_class_name": "PluginLoader"
+}

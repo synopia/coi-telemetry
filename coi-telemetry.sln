@@ -1,0 +1,28 @@
+﻿
+Microsoft Visual Studio Solution File, Format Version 12.00
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "PluginLoader", "src\PluginLoader\PluginLoader.csproj", "{5D3A0AFE-76D9-4E5D-9AFF-B6F418D2230A}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Abstractions", "src\Abstractions\Abstractions.csproj", "{B328FE80-0C35-4790-975E-CAECB339F8CF}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "RealMod", "src\RealMod\RealMod.csproj", "{6B00C53B-94C0-4F9E-8474-AC31861330DD}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Any CPU = Debug|Any CPU
+		Release|Any CPU = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{5D3A0AFE-76D9-4E5D-9AFF-B6F418D2230A}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{5D3A0AFE-76D9-4E5D-9AFF-B6F418D2230A}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{5D3A0AFE-76D9-4E5D-9AFF-B6F418D2230A}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{5D3A0AFE-76D9-4E5D-9AFF-B6F418D2230A}.Release|Any CPU.Build.0 = Release|Any CPU
+		{B328FE80-0C35-4790-975E-CAECB339F8CF}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{B328FE80-0C35-4790-975E-CAECB339F8CF}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{B328FE80-0C35-4790-975E-CAECB339F8CF}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{B328FE80-0C35-4790-975E-CAECB339F8CF}.Release|Any CPU.Build.0 = Release|Any CPU
+		{6B00C53B-94C0-4F9E-8474-AC31861330DD}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{6B00C53B-94C0-4F9E-8474-AC31861330DD}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{6B00C53B-94C0-4F9E-8474-AC31861330DD}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{6B00C53B-94C0-4F9E-8474-AC31861330DD}.Release|Any CPU.Build.0 = Release|Any CPU
+	EndGlobalSection
+EndGlobal

@@ -1,0 +1,17 @@
+bin/
+obj/
+.vs/
+.idea/
+
+packages/
+src/dashboard/node_modules/
+src/dashboard/dist/
+
+exports/*
+!exports/.gitkeep
+
+*.user
+*.suo
+
+*.log
+*.tmp
