@@ -1,37 +1,21 @@
-import {
-  DollarSign,
-  Users,
-  ShoppingCart,
-  TrendingUp,
-  ArrowUpRight,
-  ArrowDownRight,
-} from 'lucide-react'
-import StatCard from '@/components/ui/StatCard'
-import Card, { CardHeader, CardTitle, CardContent } from '@/components/ui/Card'
-import Badge from '@/components/ui/Badge'
+import Card, { CardContent, CardHeader, CardTitle } from '@/components/ui/Card'
 import Breadcrumbs from '@/components/layout/Breadcrumbs'
-import {
-  AreaChart,
-  Area,
-  BarChart,
-  Bar,
-  XAxis,
-  YAxis,
-  CartesianGrid,
-  Tooltip,
-  ResponsiveContainer,
-  Legend,
-} from 'recharts'
-import { formatCurrency } from '@/lib/utils'
+import { ResponsiveContainer } from 'recharts'
 import { useLiveSummary } from '@/api/useLiveSummary.ts'
 
-const WorstMachines = ()=>{
+const WorstMachines = () => {
   const { summary, error } = useLiveSummary()
-  const worstMachines = [...summary?.window10m?.machines??[]]
-      .sort((a, b) => (b.uptimePercent.notEnoughInput??0)+(b.uptimePercent.outputFull??0)-(a.uptimePercent.notEnoughInput??0)+(a.uptimePercent.outputFull??0))
-      .slice(0,10)
+  const worstMachines = [...(summary?.window10m?.machines ?? [])]
+    .sort(
+      (a, b) =>
+        (b.uptimePercent.notEnoughInput ?? 0) +
+        (b.uptimePercent.outputFull ?? 0) -
+        (a.uptimePercent.notEnoughInput ?? 0) +
+        (a.uptimePercent.outputFull ?? 0)
+    )
+    .slice(0, 10)
 
-  const fmt = (n?: number) => !n ? 0 : (100*n).toFixed(1)
+  const fmt = (n?: number) => (!n ? 0 : (100 * n).toFixed(1))
   return (
     <Card>
       <CardHeader>
@@ -80,7 +64,7 @@ export default function Dashboard() {
       </div>
 
       {/* Stats Grid */}
-{/*
+      {/*
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-6">
         <StatCard
           title="Total Revenue"
@@ -114,7 +98,6 @@ export default function Dashboard() {
         <WorstMachines />
       </div>
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
-
         {/* Revenue Chart */}
         <Card>
           <CardHeader>
@@ -122,7 +105,7 @@ export default function Dashboard() {
           </CardHeader>
           <CardContent>
             <ResponsiveContainer width="100%" height={300}>
-{/*
+              {/*
               <AreaChart data={revenueData}>
                 <defs>
                   <linearGradient id="colorRevenue" x1="0" y1="0" x2="0" y2="1">
@@ -160,7 +143,7 @@ export default function Dashboard() {
           </CardHeader>
           <CardContent>
             <ResponsiveContainer width="100%" height={300}>
-{/*
+              {/*
               <BarChart data={revenueData}>
                 <CartesianGrid strokeDasharray="3 3" className="stroke-secondary-200 dark:stroke-secondary-700" />
                 <XAxis dataKey="name" className="text-xs" />
@@ -234,7 +217,7 @@ export default function Dashboard() {
           </CardHeader>
           <CardContent>
             <div className="space-y-4">
-{/*
+              {/*
               {topProducts.map((product) => (
                 <div
                   key={product.id}
