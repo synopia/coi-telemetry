@@ -11,7 +11,7 @@ public sealed record MachineSummaryRow(
     int ObservedTicks,
 
     IReadOnlyDictionary<ObservedState, double> UptimePercent,
-    IReadOnlyDictionary<ObservedState, int> UptimeTicks,
+    IReadOnlyDictionary<ObservedState, double> UptimeTicks,
 
     IReadOnlyList<ProductFlowSummary> Inputs,
     IReadOnlyList<ProductFlowSummary> Outputs,

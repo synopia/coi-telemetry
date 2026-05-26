@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using CoiTelemetry.RealMod.Contracts.Dtos;
@@ -21,7 +22,7 @@ public sealed class MachineMetrics
     private ObservedState _observedState;
     private RecipeId? _recipeId;
     
-    private readonly Dictionary<ObservedState, int> _stateCounters = new();
+    private readonly Dictionary<ObservedState, double> _stateCounters = new();
     private readonly Dictionary<ProductId, double> _inputConsumed = new();
     private readonly Dictionary<ProductId, double> _outputProduced = new();
     
@@ -32,6 +33,7 @@ public sealed class MachineMetrics
         _machine = machine;
         
         _machineId = _tracker.Machine(machine);
+        _stateCounters[ObservedState.NotEnoughPower] = 0;
     }
 
     public void ObserveState()
@@ -41,7 +43,12 @@ public sealed class MachineMetrics
         
         _stateCounters.TryGetValue(_observedState, out var ticks);
         _stateCounters[_observedState] = ticks + 1;
-        
+
+        var power = _machine.ElectricityConsumer.ValueOrNull;
+        if (power is not null)
+        {
+            _stateCounters[ObservedState.NotEnoughPower] += Math.Min(1, (double)power.PowerCharged.Value / power.PowerRequired.Value);
+        }
         var recipe = _machine.LastRecipeInProgress.ValueOrNull;
         
         if (recipe is not null)
@@ -129,6 +136,7 @@ public sealed class MachineMetrics
         _observedState = ObservedState.Unknown;
 
         _stateCounters.Clear();
+        _stateCounters[ObservedState.NotEnoughPower] = 0;
 
         _inputConsumed.Clear();
         _outputProduced.Clear();

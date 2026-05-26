@@ -6,9 +6,9 @@ namespace CoiTelemetry.RealMod.Collecting;
 
 public static class MetricMath
 {
-    public static double Percent(int part, int total)=>total<=0 ? 0 : (double)part / total;
+    public static double Percent(double part, double total)=>total<=0 ? 0 : part / total;
 
-    public static Dictionary<T, double> Percent<T>(Dictionary<T,int> dict, int total) where T:Enum
+    public static Dictionary<T, double> Percent<T>(Dictionary<T,double> dict, double total) where T:Enum
     {
         Dictionary<T, double> result = new();
         foreach(var kvp in dict)

@@ -39,7 +39,7 @@ public static class SummaryCombiner
         var totalTicks = rows.Sum(x => x.Summary.Meta.ObservedTicks);
         double totalSeconds = totalTicks * SimStep.SECONDS_PER_STEP;
 
-        int Sum(Func<MachineSummaryRow, int> selector)
+        double Sum(Func<MachineSummaryRow, double> selector)
         {
             if (totalTicks <= 0)
             {
@@ -77,7 +77,7 @@ public static class SummaryCombiner
             .OrderBy(x=>x.ProductId)
             .ToArray();
 
-        Dictionary<ObservedState, int> uptimeTicks = new();
+        Dictionary<ObservedState, double> uptimeTicks = new();
 
         foreach (var value in Enum.GetValues(typeof(ObservedState)))
         {
@@ -124,7 +124,7 @@ public static class SummaryCombiner
         var totalTicks = rows.Sum(x => x.Summary.Meta.ObservedTicks);
         double totalSeconds = totalTicks * SimStep.SECONDS_PER_STEP;
 
-        int Sum(Func<VehicleSummaryRow, int> selector)
+        double Sum(Func<VehicleSummaryRow, double> selector)
         {
             if (totalTicks <= 0)
             {
@@ -177,7 +177,7 @@ public static class SummaryCombiner
 
         var deliveries = rows.Sum(x=>x.Vehicle.DeliveriesCompleted);
         var fuel = rows.Sum(x=>x.Vehicle.FuelConsumed);
-        Dictionary<ObservedState, int> uptimeTicks = new();
+        Dictionary<ObservedState, double> uptimeTicks = new();
 
         foreach (var value in Enum.GetValues(typeof(ObservedState)))
         {

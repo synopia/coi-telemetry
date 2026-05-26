@@ -11,7 +11,7 @@ public sealed record VehicleSummaryRow(
 
     string? AssignedTo,
     IReadOnlyDictionary<ObservedState, double> UptimePercent,
-    IReadOnlyDictionary<ObservedState, int> UptimeTicks,
+    IReadOnlyDictionary<ObservedState, double> UptimeTicks,
 
     double EmptyTravelDistance,
     double LoadedTravelDistance,

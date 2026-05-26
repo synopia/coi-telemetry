@@ -13,6 +13,7 @@ using Mafi.Core.Buildings.Storages;
 using Mafi.Core.Entities;
 using Mafi.Core.Entities.Dynamic;
 using Mafi.Core.PathFinding.Goals;
+using Mafi.Core.Population;
 using Mafi.Core.Prototypes;
 using Mafi.Core.Vehicles;
 using Mafi.Core.Vehicles.Excavators;
@@ -53,7 +54,7 @@ public abstract class VehicleMetrics
     private readonly EntityId _vehicleId;
     private int _observedTicks;
     private ObservedState _observedState;
-    private readonly Dictionary<ObservedState, int> _stateCounters = new();
+    private readonly Dictionary<ObservedState, double> _stateCounters = new();
 
     private EntityId? _assignedToId;
     private string? _currentGoal;
@@ -69,11 +70,11 @@ public abstract class VehicleMetrics
     private readonly Dictionary<ProductId, double> _deliveredByProduct = new();
     private readonly Dictionary<ProductId, double> _producedByProduct = new();
     private readonly Dictionary<ProductId, double> _consumedByProduct = new();
-    private readonly Dictionary<string, int> _jobsInfo = new();
+    protected readonly Dictionary<string, int> _jobsInfo = new();
     private readonly IModContext _context;
     
-    public bool IsDelivering { get; set; } = false;
-    public bool IsProducing { get; set; } = false;
+    public bool IsDelivering { get; init; } = false;
+    public bool IsProducing { get; init; } = false;
 
     public VehicleMetrics(IModContext context, EntityTracker tracker, IProductFlowMetrics productFlowMetrics, Vehicle vehicle)
     {
@@ -84,6 +85,8 @@ public abstract class VehicleMetrics
         _vehicleId = _tracker.Vehicle(vehicle);
 
         _totalDistance = vehicle.LifetimeDistanceTraveled.RawValue;
+        _stateCounters[ObservedState.NotEnoughPower] = 0;
+        _stateCounters[ObservedState.NotEnoughMaintenance] = 0;
     }
 
     protected abstract ObservedState ObserveState(IEntityAssignedWithVehicles? assignedTo, IVehicleGoal? goal);
@@ -93,14 +96,8 @@ public abstract class VehicleMetrics
         var fuelTank = _vehicle.FuelTank.ValueOrNull;
         if (fuelTank is not null)
         {
+            _stateCounters[ObservedState.NotEnoughPower] +=  (double)fuelTank.RemainingDuration.Ticks/(fuelTank.Proto.OneQuantityDuration.Ticks*fuelTank.Proto.Capacity.Value);
             _usage.Set(_tracker.Product(fuelTank.Proto.Product), (double)fuelTank.RemainingDuration.Ticks/fuelTank.Proto.OneQuantityDuration.Ticks);
-
-            // var fuelTicks = fuelTank.RemainingDuration;
-            // var diff = _lastFuel - fuelTicks;
-            // var tankTicks= fuelTank.Proto.OneQuantityDuration.Ticks*fuelTank.Proto.Capacity.Value;
-            // var currentFuel = (double)diff.Ticks/tankTicks;
-            // AddFuelConsumed(currentFuel);
-            // _lastFuel = fuelTicks;
         }
     }
 
@@ -129,6 +126,9 @@ public abstract class VehicleMetrics
         _currentGoal = goal?.GoalName.Value;
         
         UpdateFuel();
+        
+        _stateCounters[ObservedState.NotEnoughMaintenance] += Math.Min(1,_vehicle.Maintenance.Status.MaintenancePointsCurrent.Value.ToDouble()/_vehicle.Maintenance.Status.MaintenancePointsMax.Value.ToDouble());
+        
         ObservedState state = ObservedState.Unknown;
         
         if (_vehicle.CannotWorkDueToLowFuel)
@@ -193,34 +193,14 @@ public abstract class VehicleMetrics
         _stateCounters[state] = ticks + 1;
         _observedState = state;
         
-  /*
-        ObservedState state;
-        if (_vehicle is Excavator excavator)
-        {
-            state = GetExcavatorObservedState(excavator);
-            if (state != _observedState && state == ObservedState.Unloading)
-            {
-            }
-        }
-        else
-        {
-            if (_vehicle is IVehicleForCargoJob vehicleForCargoJob)
-            {
-                var currentCargo = vehicleForCargoJob.Cargo.TotalQuantity.Value;
-                _cargoDelta = currentCargo - _lastCargoAmount;
-                _lastCargoAmount = currentCargo;
-            }
-            state = _jobMetric?.Process(_vehicle) ?? GetVehicleState(); 
-        }
-        */
-        
-      
     }
 
     public void ResetWindow()
     {
         _observedTicks = 0;
         _stateCounters.Clear();
+        _stateCounters[ObservedState.NotEnoughPower] = 0;
+        _stateCounters[ObservedState.NotEnoughMaintenance] = 0;
         _jobsInfo.Clear();
         _deliveriesCompleted = 0;
         _distanceEmpty = 0;
@@ -353,18 +333,12 @@ public sealed class TruckMetrics : VehicleMetrics
 
         if (assignedTo is not null)
         {
-            if (goal is StaticEntityVehicleGoal staticGoal)
+            _jobsInfo[$"goal {goal?.GoalName}"] = 1;
+            if( _truck is { IsDriving: false, IsFull: true } )
             {
-                var staticEntity = staticGoal.GoalStaticEntity.ValueOrNull;
-                if (staticEntity is not null)
-                {
-                    if( _truck is { IsDriving: false, IsNotEmpty: true } )
-                    {
-                        // truck is assigned, has cargo, is not driving and current goal is static entity
-                        // so it waits to deliver cargo
-                        return ObservedState.OutputFull;
-                    }
-                }
+                // truck is assigned, full cargo and is not driving 
+                // so it waits to deliver cargo
+                return ObservedState.OutputFull;
             }
             // all other cases the truck is counted as working
             return ObservedState.Working;

@@ -26,6 +26,9 @@ public sealed class ExportScheduler :  IDisposable
     private LiveDataHub _liveData;
     private ModWebserver _webServer;
     private readonly IEntitiesManager _entitiesManager;
+    private MetricCollectionProfiler _profiler = new ();
+    private DateTime _lastDebug = DateTime.UtcNow;
+    
     public ExportScheduler(IModContext context, IEntitiesManager entitiesManager,ISimLoopEvents events)
     {
         _entitiesManager = entitiesManager;
@@ -46,7 +49,23 @@ public sealed class ExportScheduler :  IDisposable
         {
             return;
         }
-        _collector.ObserveSimulationTick();
+
+        using (_profiler.Measure())
+        {
+            _collector.ObserveSimulationTick();
+        }
+
+        if( DateTime.UtcNow - _lastDebug > TimeSpan.FromSeconds(10))
+        {
+            _lastDebug = DateTime.UtcNow;
+            var perf = _profiler.GetSnapshotAndReset();
+            _context.Logger.Info(
+                $"Metric collection: {perf.CollectionCpuPercentApprox:F3}% " +
+                $"({perf.CollectionSeconds * 1000:F2}ms / {perf.WallSeconds:F2}s, " +
+                $"avg {perf.AvgCollectionMs:F4}ms/call, calls {perf.CollectionCalls})"
+                );
+        }
+        
         var now = _events.CurrentStep;
         var elapsed = now - _lastExport;
         if (elapsed < _exportInterval)

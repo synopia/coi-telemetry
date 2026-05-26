@@ -1,3 +1,5 @@
+using System.Diagnostics;
+using System.Threading;
 using CoiTelemetry.Abstractions;
 using CoiTelemetry.RealMod.Runtime;
 

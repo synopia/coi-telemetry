@@ -82,6 +82,7 @@
         <Compile Include="Mapping\EntityTracker.cs" />
         <Compile Include="Mapping\ExportIdMapper.cs" />
         <Compile Include="Runtime\ExportScheduler.cs" />
+        <Compile Include="Runtime\MetricProfiler.cs" />
         <Compile Include="Runtime\ModRuntime.cs" />
         <Compile Include="Runtime\ObjectInspector.cs" />
         <Compile Include="TelemetryMod.cs" />
