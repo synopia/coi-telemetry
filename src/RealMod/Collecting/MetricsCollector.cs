@@ -163,7 +163,7 @@ public sealed class MetricsCollector:IProductFlowMetrics
         var id = _tracker.Vehicle(vehicle);
         if (!_vehicles.TryGetValue(id, out var metrics))
         {
-            metrics = new VehicleMetrics(_context,_tracker, this, vehicle);
+            metrics = VehicleMetrics.Create(_context,_tracker, this, vehicle);
             _vehicles.Add(id, metrics);
         }
 

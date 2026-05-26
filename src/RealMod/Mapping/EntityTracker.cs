@@ -1,6 +1,7 @@
 using System.Collections.Generic;
 using CoiTelemetry.RealMod.Contracts.Dtos;
 using CoiTelemetry.RealMod.Contracts.Ids;
+using Mafi.Core.Buildings.FuelStations;
 using Mafi.Core.Buildings.Mine;
 using Mafi.Core.Entities;
 using Mafi.Core.Entities.Dynamic;
@@ -29,6 +30,10 @@ public sealed class EntityTracker
             return null;
         }
 
+        if (entity is FuelStation fuelStation)
+        {
+            return FuelStation(fuelStation);
+        }
         if (entity is MineTower mineTower)
         {
             return MineTower(mineTower);
@@ -54,6 +59,18 @@ public sealed class EntityTracker
                 Id:id.Value,
                 Type:mineTower.DefaultTitle.Value,
                 Name:mineTower.CustomTitle.ValueOrNull);
+        }
+        return id;
+    }
+    public EntityId FuelStation(FuelStation fuelStation)
+    {
+        var id = _ids.FuelStation(fuelStation.Id);
+        if (!_entities.ContainsKey(id.Value))
+        {
+            _entities[id.Value] = new EntityInfo(
+                Id:id.Value,
+                Type:fuelStation.DefaultTitle.Value,
+                Name:fuelStation.CustomTitle.ValueOrNull);
         }
         return id;
     }

@@ -41,7 +41,7 @@ public sealed class ExportScheduler :  IDisposable
 
     public void OnSimulationTick()
     {
-        Debug();
+        // Debug();
         if (_events.IsSimPaused)
         {
             return;

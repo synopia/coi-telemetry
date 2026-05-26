@@ -12,6 +12,7 @@ public sealed class ExportIdMapper
     private readonly Dictionary<Mafi.Core.EntityId, EntityId> _machineIds = new();
     private readonly Dictionary<Mafi.Core.EntityId, EntityId> _vehicleIds = new();
     private readonly Dictionary<Mafi.Core.EntityId, EntityId> _mineTowers = new();
+    private readonly Dictionary<Mafi.Core.EntityId, EntityId> _fuelStations = new();
     private readonly Dictionary<ProductProto.ID, ProductId> _productIds = new();
     private readonly Dictionary<RecipeProto.ID, RecipeId> _recipeIds = new();
 
@@ -24,6 +25,16 @@ public sealed class ExportIdMapper
         mineTowerId = new EntityId($"mineTower:{id.Value}");
         _mineTowers[id] = mineTowerId;
         return mineTowerId;
+    }
+    public EntityId FuelStation(Mafi.Core.EntityId id)
+    {
+        if (_mineTowers.TryGetValue(id, out var fuelStationId))
+        {
+            return fuelStationId;
+        }
+        fuelStationId = new EntityId($"fuelStation:{id.Value}");
+        _fuelStations[id] = fuelStationId;
+        return fuelStationId;
     }
 
     public EntityId Machine(Mafi.Core.EntityId id, Proto.ID protoId)

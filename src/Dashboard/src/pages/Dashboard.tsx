@@ -126,7 +126,7 @@ export default function Dashboard() {
         {/* Revenue Chart */}
         <Card>
           <CardHeader>
-            <CardTitle>Revenue Overview</CardTitle>
+            <CardTitle>Net amount chart</CardTitle>
           </CardHeader>
           <CardContent>
             {summary&&<NetAmountChart summary={summary}/>}

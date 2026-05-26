@@ -4,16 +4,16 @@ using Mafi;
 
 namespace CoiTelemetry.RealMod.Collecting;
 
-
+public enum ProductFlowDirection
+{
+    None,
+    Produced,
+    Consumed
+}
 public interface IProductFlowMetrics
 {
     void AddProduced(ProductId productId, double amount);
     void AddConsumed(ProductId productId, double amount);
-    void AddImported(ProductId productId, double amount);
-    void AddExported(ProductId productId, double amount);
-    void AddMined(ProductId productId, double amount);
-    void AddDumped(ProductId productId, double amount);
-    void AddLost(ProductId productId, double amount);
 }
 
 public class ProductFlowMetrics
