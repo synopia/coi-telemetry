@@ -39,7 +39,7 @@ public static class SummaryCombiner
         var totalTicks = rows.Sum(x => x.Summary.Meta.ObservedTicks);
         double totalSeconds = totalTicks * SimStep.SECONDS_PER_STEP;
 
-        double Sum(Func<MachineSummaryRow, double> selector)
+        int Sum(Func<MachineSummaryRow, int> selector)
         {
             if (totalTicks <= 0)
             {
@@ -77,7 +77,7 @@ public static class SummaryCombiner
             .OrderBy(x=>x.ProductId)
             .ToArray();
 
-        Dictionary<ObservedState, double> uptimeTicks = new();
+        Dictionary<ObservedState, int> uptimeTicks = new();
 
         foreach (var value in Enum.GetValues(typeof(ObservedState)))
         {
@@ -98,6 +98,10 @@ public static class SummaryCombiner
             RecipeId: latest.RecipeId,
             UptimePercent: MetricMath.Percent(uptimeTicks, totalTicks),
             UptimeTicks: uptimeTicks,
+            Maintenance: latest.Maintenance,
+            Power: latest.Power,
+            Computing: latest.Computing,
+            Workers: latest.Workers,
             Inputs: inputs,
             Outputs: outputs,
             InputBuffers: latest.InputBuffers,
@@ -124,7 +128,7 @@ public static class SummaryCombiner
         var totalTicks = rows.Sum(x => x.Summary.Meta.ObservedTicks);
         double totalSeconds = totalTicks * SimStep.SECONDS_PER_STEP;
 
-        double Sum(Func<VehicleSummaryRow, double> selector)
+        int Sum(Func<VehicleSummaryRow, int> selector)
         {
             if (totalTicks <= 0)
             {
@@ -176,8 +180,7 @@ public static class SummaryCombiner
             .ToArray();
 
         var deliveries = rows.Sum(x=>x.Vehicle.DeliveriesCompleted);
-        var fuel = rows.Sum(x=>x.Vehicle.FuelConsumed);
-        Dictionary<ObservedState, double> uptimeTicks = new();
+        Dictionary<ObservedState, int> uptimeTicks = new();
 
         foreach (var value in Enum.GetValues(typeof(ObservedState)))
         {
@@ -203,8 +206,11 @@ public static class SummaryCombiner
             AssignedTo: latest.AssignedTo,
             ObservedTicks: totalTicks,
             DeliveriesCompleted: deliveries,
-            FuelConsumed: fuel,
             Delivered: delivered,
+            Maintenance: latest.Maintenance,
+            Power: latest.Power,
+            Computing: latest.Computing,
+            Workers: latest.Workers,
             Produced: produced,
             Consumed: consumed,
             PrimaryBlocker: primaryBlocker.Value<=0 ? ObservedState.Unknown : primaryBlocker.Key,

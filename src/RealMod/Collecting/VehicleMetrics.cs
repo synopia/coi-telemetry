@@ -24,81 +24,54 @@ using EntityId = CoiTelemetry.RealMod.Contracts.Ids.EntityId;
 
 namespace CoiTelemetry.RealMod.Collecting;
 
-public abstract class VehicleMetrics
+public abstract class VehicleMetrics : BaseMetrics
 {
     public static VehicleMetrics Create(IModContext context, EntityTracker tracker,
         IProductFlowMetrics productFlowMetrics, Vehicle vehicle)
     {
         if (vehicle is Truck truck)
         {
-            return new TruckMetrics(context, tracker, productFlowMetrics, truck);
+            return new TruckMetrics(context,  productFlowMetrics,tracker, truck);
         }
 
         if (vehicle is Excavator excavator)
         {
-            return new ExcavatorMetrics(context, tracker, productFlowMetrics, excavator);
+            return new ExcavatorMetrics(context, productFlowMetrics, tracker, excavator);
         }
         
         if (vehicle is TreeHarvester treeHarvester)
         {
-            return new TreeHarvesterMetrics(context, tracker, productFlowMetrics, treeHarvester);
+            return new TreeHarvesterMetrics(context, productFlowMetrics, tracker, treeHarvester);
         }
         
         throw new ArgumentException($"Unsupported vehicle type: {vehicle.GetType().Name}", nameof(vehicle));
     }
     
-    private readonly EntityTracker _tracker;
-    private readonly IProductFlowMetrics _productFlowMetrics;
     private readonly Vehicle _vehicle;
-    
     private readonly EntityId _vehicleId;
-    private int _observedTicks;
-    private ObservedState _observedState;
-    private readonly Dictionary<ObservedState, double> _stateCounters = new();
+    
+    protected EntityId? AssignedToId {get; private set;}
+    protected string? CurrentGoal { get; set;}
+    protected int DeliveriesCompleted { get; set; }
 
-    private EntityId? _assignedToId;
-    private string? _currentGoal;
-    private int _deliveriesCompleted;
-    private double _fuelConsumed;
     private double _distanceEmpty;
     private double _distanceLoaded;
-
     private long _totalDistance;
+    
     private readonly CargoMetrics _cargo = new();
-    private readonly CargoMetrics _usage = new();
-    
     private readonly Dictionary<ProductId, double> _deliveredByProduct = new();
-    private readonly Dictionary<ProductId, double> _producedByProduct = new();
-    private readonly Dictionary<ProductId, double> _consumedByProduct = new();
-    protected readonly Dictionary<string, int> _jobsInfo = new();
-    private readonly IModContext _context;
     
-    public bool IsDelivering { get; init; } = false;
-    public bool IsProducing { get; init; } = false;
+    private readonly Dictionary<string, int> _jobsInfo = new();
+    
+    protected bool IsDelivering { get; init; } = false;
+    protected bool IsProducing { get; init; } = false;
 
-    public VehicleMetrics(IModContext context, EntityTracker tracker, IProductFlowMetrics productFlowMetrics, Vehicle vehicle)
+    public VehicleMetrics(IModContext context, IProductFlowMetrics productFlowMetrics, EntityTracker tracker, Vehicle vehicle):base(context, productFlowMetrics, tracker, vehicle)
     {
-        _context = context;
-        _tracker = tracker;
-        _productFlowMetrics = productFlowMetrics;
         _vehicle = vehicle;
-        _vehicleId = _tracker.Vehicle(vehicle);
+        _vehicleId = Tracker.Vehicle(vehicle);
 
         _totalDistance = vehicle.LifetimeDistanceTraveled.RawValue;
-        _stateCounters[ObservedState.NotEnoughPower] = 0;
-        _stateCounters[ObservedState.NotEnoughMaintenance] = 0;
-    }
-
-    protected abstract ObservedState ObserveState(IEntityAssignedWithVehicles? assignedTo, IVehicleGoal? goal);
-
-    protected void UpdateFuel()
-    {
-        var fuelTank = _vehicle.FuelTank.ValueOrNull;
-        if (fuelTank is not null)
-        {
-            _stateCounters[ObservedState.NotEnoughPower] +=  (double)fuelTank.RemainingDuration.Ticks/(fuelTank.Proto.OneQuantityDuration.Ticks*fuelTank.Proto.Capacity.Value);
-            _usage.Set(_tracker.Product(fuelTank.Proto.Product), (double)fuelTank.RemainingDuration.Ticks/fuelTank.Proto.OneQuantityDuration.Ticks);
-        }
     }
 
     protected void UpdateCargo(IVehicleCargo cargo)
@@ -106,55 +79,25 @@ public abstract class VehicleMetrics
         var it = cargo.GetEnumerator();
         while (it.MoveNext())
         {
-            var productId = _tracker.Product(it.Current.Key);
+            var productId = Tracker.Product(it.Current.Key);
             _cargo.Set(productId, it.Current.Value.Value);
         }
     }
 
-    protected void UpdateCargo(ProductQuantity productQuantity)
-    {
-        var productId = _tracker.Product(productQuantity.Product);
-        _cargo.Set(productId, productQuantity.Quantity.Value);
-    }
 
-    public void ObserveState()
+    protected abstract ObservedState FindState();
+    
+    protected override void ObserveState()
     {
-        _observedTicks++;
         var assignedTo = _vehicle.AssignedTo.ValueOrNull;
-        _assignedToId = _tracker.Entity(assignedTo);
+        AssignedToId = Tracker.Entity(assignedTo);
         var goal = _vehicle.NavigationGoal.ValueOrNull;
-        _currentGoal = goal?.GoalName.Value;
-        
-        UpdateFuel();
-        
-        _stateCounters[ObservedState.NotEnoughMaintenance] += Math.Min(1,_vehicle.Maintenance.Status.MaintenancePointsCurrent.Value.ToDouble()/_vehicle.Maintenance.Status.MaintenancePointsMax.Value.ToDouble());
-        
-        ObservedState state = ObservedState.Unknown;
-        
-        if (_vehicle.CannotWorkDueToLowFuel)
-        {
-            state = ObservedState.NotEnoughPower;
-        }
-
-        if (_vehicle.IsStuck)
-        {
-            state = ObservedState.Waiting;
-        }
-
-        if (!_vehicle.Maintenance.CanWork())
-        {
-            state = ObservedState.NotEnoughMaintenance;
-        }
-
-        if (state == ObservedState.Unknown)
-        {
-            state = ObserveState(assignedTo, goal);
-        }
+        CurrentGoal = goal?.GoalName.Value;
 
         var totalDistance = _vehicle.LifetimeDistanceTraveled.RawValue;
-        AddMovedDistance(totalDistance-_totalDistance, !_cargo.IsEmpty);
+        AddMovedDistance(totalDistance - _totalDistance, !_cargo.IsEmpty);
         _totalDistance = totalDistance;
-        
+
         var currentJob = _vehicle.CurrentJob.ValueOrNull;
         // if (currentJob is not null)
         // {
@@ -162,8 +105,15 @@ public abstract class VehicleMetrics
         //     _jobsInfo.TryGetValue(msg, out var count);
         //     _jobsInfo[msg] = count + 1;
         // }
+        
+        TrackState(FindState());
+    }
+
+    protected override void AfterObserveState()
+    {
+        base.AfterObserveState();
+        
         _cargo.SwapBuffers();
-        _usage.SwapBuffers();
         foreach (var kv in _cargo.GetDelta())
         {
             if (kv.Value<0)
@@ -171,6 +121,10 @@ public abstract class VehicleMetrics
                 if(IsDelivering)
                 {
                     AddDeliveryCompleted(kv.Key, -kv.Value);
+                    if (_cargo.GetLast(kv.Key) <= 0)
+                    {
+                        DeliveriesCompleted++;
+                    }
                 }
             }
             else 
@@ -181,108 +135,52 @@ public abstract class VehicleMetrics
                 }
             }            
         }
-
-        foreach (var kv in _usage.GetDelta())
-        {
-            if (kv.Value < 0)
-            {
-                AddConsumed(kv.Key, -kv.Value);
-            }
-        }
-        _stateCounters.TryGetValue(state, out var ticks);
-        _stateCounters[state] = ticks + 1;
-        _observedState = state;
-        
     }
 
-    public void ResetWindow()
+    public override void ResetWindow()
     {
-        _observedTicks = 0;
-        _stateCounters.Clear();
-        _stateCounters[ObservedState.NotEnoughPower] = 0;
-        _stateCounters[ObservedState.NotEnoughMaintenance] = 0;
+        base.ResetWindow();
+
         _jobsInfo.Clear();
-        _deliveriesCompleted = 0;
+        DeliveriesCompleted = 0;
         _distanceEmpty = 0;
         _distanceLoaded = 0;
-        _fuelConsumed = 0;
         
         _deliveredByProduct.Clear();
-        _producedByProduct.Clear();
-        _consumedByProduct.Clear();
     }
-    private ObservedState GetPrimaryBlocker()
-    {
-        if (_stateCounters.Count == 0)
-        {
-            return ObservedState.Unknown;
-        }
-        var best = _stateCounters.OrderByDescending(x => x.Value).First();
-        return best.Value <= 0 ? ObservedState.Unknown : best.Key;
-    }
+    
     public VehicleSummaryRow BuildSummaryRow()
     {
-        var windowSeconds = SimStep.SECONDS_PER_STEP * _observedTicks;
         var delivered = _deliveredByProduct
             .Select(x => new ProductFlowSummary(
                 ProductId: x.Key.Value,
                 Amount: x.Value,
-                PerMinute: MetricMath.PerMinute(x.Value, windowSeconds)))
+                PerMinute: MetricMath.PerMinute(x.Value, ObservedSeconds)))
             .OrderBy(x => x.ProductId)
             .ToArray();
 
-        var produced = _producedByProduct
-            .Select(x => new ProductFlowSummary(
-                ProductId: x.Key.Value,
-                Amount: x.Value,
-                PerMinute: MetricMath.PerMinute(x.Value, windowSeconds)))
-            .OrderBy(x => x.ProductId)
-            .ToArray();
-
-        var consumed = _consumedByProduct
-            .Select(x => new ProductFlowSummary(
-                ProductId: x.Key.Value,
-                Amount: x.Value,
-                PerMinute: MetricMath.PerMinute(x.Value, windowSeconds)))
-            .OrderBy(x => x.ProductId)
-            .ToArray();
         return new VehicleSummaryRow(
             VehicleId: _vehicleId.Value,
-            AssignedTo: _assignedToId?.Value,
-            ObservedTicks: _observedTicks,
-            UptimePercent:MetricMath.Percent(_stateCounters, _observedTicks),
-            UptimeTicks: _stateCounters.ToDictionary(x => x.Key, x => x.Value),
-            DeliveriesCompleted: _deliveriesCompleted,
-            FuelConsumed: _fuelConsumed,
+            AssignedTo: AssignedToId?.Value,
+            ObservedTicks: ObservedTicks,
+            Maintenance: Maintenance,
+            Power: Power,
+            Computing: Computing,
+            Workers: Workers,
+            UptimePercent: BuildStatePercentages(),
+            UptimeTicks: BuildStateCounters(),
+            DeliveriesCompleted: DeliveriesCompleted,
             EmptyTravelDistance: _distanceEmpty,
             LoadedTravelDistance: _distanceLoaded,
             Jobs: _jobsInfo.ToDictionary(x => x.Key, x => x.Value),
             Delivered: delivered,
-            Produced: produced,
-            Consumed: consumed,
+            Produced: BuildProduceFlow(),
+            Consumed: BuildConsumeFlow(),
             PrimaryBlocker: GetPrimaryBlocker()
         );
     }
-    public void AddProduced(ProductId productId, double amount)
-    {
-        if (amount <= 0)
-        {
-            return;
-        }
-        AddTo(_producedByProduct, productId, amount);
-        _productFlowMetrics.AddProduced(productId, amount);
-    }
-    public void AddConsumed(ProductId productId, double amount)
-    {
-        if (amount <= 0)
-        {
-            return;
-        }
-        AddTo(_consumedByProduct, productId, amount);
-        _productFlowMetrics.AddConsumed(productId, amount);
-    }
 
-    public void AddMovedDistance(double distance, bool loaded)
+    protected void AddMovedDistance(double distance, bool loaded)
     {
         if (distance <= 0)
         {
@@ -299,41 +197,39 @@ public abstract class VehicleMetrics
         }
     }
 
-    public void AddDeliveryCompleted(ProductId productId, double amount)
+    protected void UpdateCargo(ProductQuantity productQuantity)
+    {
+        var productId = Tracker.Product(productQuantity.Product);
+        _cargo.Set(productId, productQuantity.Quantity.Value);
+    }
+
+    protected void AddDeliveryCompleted(ProductId productId, double amount)
     {
         if (amount <= 0)
         {
             return;
         }
-        _deliveriesCompleted++;
         AddTo(_deliveredByProduct, productId, amount);
     }
-    
-    private static void AddTo(Dictionary<ProductId, double> dict, ProductId productId, double amount)
-    {
-        dict.TryGetValue(productId, out var current);
-        dict[productId] = current + amount;
-    }
-  
 }
 
 public sealed class TruckMetrics : VehicleMetrics
 {
     private Truck _truck;
-    public TruckMetrics(IModContext context, EntityTracker tracker, IProductFlowMetrics productFlowMetrics, Truck truck) : base(context, tracker, productFlowMetrics, truck)
+    
+    public TruckMetrics(IModContext context,  IProductFlowMetrics productFlowMetrics,EntityTracker tracker, Truck truck) : base(context, productFlowMetrics, tracker, truck)
     {
         _truck = truck;
         IsDelivering = true;
     }
 
 
-    protected override ObservedState ObserveState(IEntityAssignedWithVehicles? assignedTo, IVehicleGoal? goal)
+    protected override ObservedState FindState()
     {
         UpdateCargo(_truck.Cargo);
 
-        if (assignedTo is not null)
+        if (AssignedToId is not null)
         {
-            _jobsInfo[$"goal {goal?.GoalName}"] = 1;
             if( _truck is { IsDriving: false, IsFull: true } )
             {
                 // truck is assigned, full cargo and is not driving 
@@ -352,7 +248,7 @@ public sealed class TruckMetrics : VehicleMetrics
 
         if (_truck.NeedsJob)
         {
-            return ObservedState.Waiting;
+            return ObservedState.Idle;
         }
         
         if (_truck.Cargo.TotalQuantity.Value > 0)
@@ -367,20 +263,20 @@ public sealed class TruckMetrics : VehicleMetrics
 public sealed class ExcavatorMetrics : VehicleMetrics
 {
     private Excavator _excavator;
-    public ExcavatorMetrics(IModContext context, EntityTracker tracker, IProductFlowMetrics productFlowMetrics, Excavator excavator) : base(context, tracker, productFlowMetrics, excavator)
+    public ExcavatorMetrics(IModContext context, IProductFlowMetrics productFlowMetrics, EntityTracker tracker, Excavator excavator) : base(context, productFlowMetrics, tracker, excavator)
     {
         _excavator = excavator;
         IsProducing = true;
     }
 
-    protected override ObservedState ObserveState(IEntityAssignedWithVehicles? assignedTo, IVehicleGoal? goal)
+    protected override ObservedState FindState()
     {
         UpdateCargo(_excavator.Cargo);
         
         switch (_excavator.State)
         {
             case ExcavatorState.Idle:
-                return ObservedState.Waiting;
+                return ObservedState.Idle;
             case ExcavatorState.DoJob:
                 return ObservedState.Working;
             case ExcavatorState.LoadTruck:
@@ -390,7 +286,7 @@ public sealed class ExcavatorMetrics : VehicleMetrics
             case ExcavatorState.WaitingForTruck:
                 return ObservedState.OutputFull;
             case ExcavatorState.GettingUnstuck:
-                return ObservedState.Waiting;
+                return ObservedState.Idle;
             default:
                 return ObservedState.Unknown;
         }    
@@ -401,14 +297,14 @@ public sealed class TreeHarvesterMetrics : VehicleMetrics
 {
     private TreeHarvester _treeHarvester;
 
-    public TreeHarvesterMetrics(IModContext context, EntityTracker tracker, IProductFlowMetrics productFlowMetrics,
-        TreeHarvester treeHarvester) : base(context, tracker, productFlowMetrics, treeHarvester)
+    public TreeHarvesterMetrics(IModContext context, IProductFlowMetrics productFlowMetrics, EntityTracker tracker,
+        TreeHarvester treeHarvester) : base(context, productFlowMetrics, tracker, treeHarvester)
     {
         _treeHarvester = treeHarvester;
         IsProducing = true;
     }
 
-    protected override ObservedState ObserveState(IEntityAssignedWithVehicles? assignedTo, IVehicleGoal? goal)
+    protected override ObservedState FindState()
     {
         UpdateCargo(_treeHarvester.Cargo);
         switch (_treeHarvester.State)

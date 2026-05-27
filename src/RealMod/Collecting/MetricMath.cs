@@ -8,7 +8,7 @@ public static class MetricMath
 {
     public static double Percent(double part, double total)=>total<=0 ? 0 : part / total;
 
-    public static Dictionary<T, double> Percent<T>(Dictionary<T,double> dict, double total) where T:Enum
+    public static Dictionary<T, double> Percent<T>(Dictionary<T,int> dict, double total) where T:Enum
     {
         Dictionary<T, double> result = new();
         foreach(var kvp in dict)

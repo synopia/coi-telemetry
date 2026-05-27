@@ -30,7 +30,7 @@ public sealed class MetricsCollector:IProductFlowMetrics
         _context = context;
         _entitiesManager = entitiesManager;
         _events = events;
-        _tracker = new EntityTracker(new ExportIdMapper());
+        _tracker = new EntityTracker(new IdTracker());
     }
     
     public void ObserveSimulationTick()
@@ -46,7 +46,7 @@ public sealed class MetricsCollector:IProductFlowMetrics
         foreach (var machine in _entitiesManager.GetAllEntitiesOfType<Machine>())
         {
             var metrics = GetMachineMetrics(machine);
-            metrics.ObserveState();
+            metrics.Update();
         }
     }
 
@@ -55,7 +55,7 @@ public sealed class MetricsCollector:IProductFlowMetrics
         foreach (var vehicle in _entitiesManager.GetAllEntitiesOfType<Vehicle>())
         {
             var metrics = GetVehicleMetrics(vehicle);
-            metrics.ObserveState();
+            metrics.Update();
         }
     }
 
@@ -151,7 +151,7 @@ public sealed class MetricsCollector:IProductFlowMetrics
         var id = _tracker.Machine(machine);
         if (!_machines.TryGetValue(id, out var metrics))
         {
-            metrics = new MachineMetrics(_tracker, this, machine);
+            metrics = new MachineMetrics(_context, _tracker, this, machine);
             _machines.Add(id, metrics);
         }
 

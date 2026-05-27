@@ -12,16 +12,12 @@ using Mafi.Core.Products;
 namespace CoiTelemetry.RealMod.Mapping;
 
 
-public sealed class EntityTracker
+public sealed class EntityTracker(IdTracker ids)
 {
-    private readonly ExportIdMapper _ids;
-    private readonly Dictionary<string, EntityInfo> _entities = new();
-    public IEnumerable<EntityInfo> Entities => _entities.Values;
-
-    public EntityTracker(ExportIdMapper ids)
-    {
-        _ids = ids;
-    }
+    private readonly Dictionary<string, MetaInfo> _meta = new();
+    public IEnumerable<MetaInfo> Meta => _meta.Values;
+    
+    public IdTracker Ids => ids;
 
     public EntityId? Entity(IEntity? entity)
     {
@@ -52,10 +48,10 @@ public sealed class EntityTracker
 
     public EntityId MineTower(MineTower mineTower)
     {
-        var id = _ids.MineTower(mineTower.Id);
-        if (!_entities.ContainsKey(id.Value))
+        var id = ids.MineTower(mineTower.Id);
+        if (!_meta.ContainsKey(id.Value))
         {
-            _entities[id.Value] = new EntityInfo(
+            _meta[id.Value] = new MetaInfo(
                 Id:id.Value,
                 Type:mineTower.DefaultTitle.Value,
                 Name:mineTower.CustomTitle.ValueOrNull);
@@ -64,10 +60,10 @@ public sealed class EntityTracker
     }
     public EntityId FuelStation(FuelStation fuelStation)
     {
-        var id = _ids.FuelStation(fuelStation.Id);
-        if (!_entities.ContainsKey(id.Value))
+        var id = ids.FuelStation(fuelStation.Id);
+        if (!_meta.ContainsKey(id.Value))
         {
-            _entities[id.Value] = new EntityInfo(
+            _meta[id.Value] = new MetaInfo(
                 Id:id.Value,
                 Type:fuelStation.DefaultTitle.Value,
                 Name:fuelStation.CustomTitle.ValueOrNull);
@@ -76,10 +72,10 @@ public sealed class EntityTracker
     }
     public EntityId Machine(Machine machine)
     {
-        var id = _ids.Machine(machine.Id, machine.Prototype.Id);
-        if (!_entities.ContainsKey(id.Value))
+        var id = ids.Machine(machine.Id, machine.Prototype.Id);
+        if (!_meta.ContainsKey(id.Value))
         {
-            _entities[id.Value] = new EntityInfo(
+            _meta[id.Value] = new MetaInfo(
                 Id:id.Value,
                 Type:machine.DefaultTitle.Value,
                 Name:machine.CustomTitle.ValueOrNull);
@@ -89,10 +85,10 @@ public sealed class EntityTracker
 
     public EntityId Vehicle(Vehicle vehicle)
     {
-        var id = _ids.Vehicle(vehicle.Id, vehicle.Prototype.Id);
-        if (!_entities.ContainsKey(id.Value))
+        var id = ids.Vehicle(vehicle.Id, vehicle.Prototype.Id);
+        if (!_meta.ContainsKey(id.Value))
         {
-            _entities[id.Value] = new EntityInfo(
+            _meta[id.Value] = new MetaInfo(
                 Id:id.Value,
                 Type:vehicle.DefaultTitle.Value,
                 Name:vehicle.CustomTitle.Value);
@@ -102,10 +98,10 @@ public sealed class EntityTracker
 
     public ProductId Product(ProductProto product)
     {
-        var id=_ids.Product(product.Id);
-        if (!_entities.ContainsKey(id.Value))
+        var id=ids.Product(product.Id);
+        if (!_meta.ContainsKey(id.Value))
         {
-            _entities[id.Value] = new EntityInfo(
+            _meta[id.Value] = new MetaInfo(
                 Id:id.Value,
                 Name:product.Strings.Name.TranslatedString,
                 Type:null
@@ -120,10 +116,10 @@ public sealed class EntityTracker
         {
             return null;
         }
-        var id = _ids.Recipe(recipe.Id);
-        if (!_entities.ContainsKey(id.Value))
+        var id = ids.Recipe(recipe.Id);
+        if (!_meta.ContainsKey(id.Value))
         {
-            _entities[id.Value] = new EntityInfo(
+            _meta[id.Value] = new MetaInfo(
                 Id:id.Value,
                 Name:recipe.Strings.Name.TranslatedString,
                 Type:null

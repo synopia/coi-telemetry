@@ -4,11 +4,14 @@ public enum ObservedState
 {
     Unknown,
     Working,
-    Waiting,
+    Idle,
+    
+    NotEnoughInput, // waiting empty
+    OutputFull,  // waiting loaded
+    
     NotEnoughWorkers,
     NotEnoughPower,// fuel==power
     NotEnoughComputing,
-    NotEnoughMaintenance,
-    NotEnoughInput, // waiting empty
-    OutputFull  // waiting loaded
+    NotEnoughMaintenance
 }
+

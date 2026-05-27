@@ -7,7 +7,7 @@ using Mafi.Core.Prototypes;
 namespace CoiTelemetry.RealMod.Mapping;
 
 
-public sealed class ExportIdMapper
+public sealed class IdTracker
 {
     private readonly Dictionary<Mafi.Core.EntityId, EntityId> _machineIds = new();
     private readonly Dictionary<Mafi.Core.EntityId, EntityId> _vehicleIds = new();

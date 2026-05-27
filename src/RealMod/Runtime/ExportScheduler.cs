@@ -21,7 +21,7 @@ public sealed class ExportScheduler :  IDisposable
     private readonly ISimLoopEvents _events;
     private readonly IModContext _context;
     private readonly RollingSummaryAggregator _aggregator;
-    private Duration _exportInterval = Duration.FromSec(10);
+    private Duration _exportInterval = Duration.FromSec(1);
     private SimStep _lastExport;
     private LiveDataHub _liveData;
     private ModWebserver _webServer;

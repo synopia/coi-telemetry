@@ -48,6 +48,10 @@
             <HintPath>$(COI_ROOT)\Captain of Industry_Data\Managed\Mafi.dll</HintPath>
             <Private>false</Private>
         </Reference>
+        <Reference Include="Mafi">
+            <HintPath>$(COI_ROOT)\Captain of Industry_Data\Managed\Mafi.Base.dll</HintPath>
+            <Private>false</Private>
+        </Reference>
         <Reference Include="Mafi.Core">
             <HintPath>$(COI_ROOT)\Captain of Industry_Data\Managed\Mafi.Core.dll</HintPath>
             <Private>false</Private>
@@ -60,13 +64,14 @@
     <ItemGroup>
         <Compile Include="Aggregation\RollingSummaryAggregator.cs" />
         <Compile Include="Aggregation\SummaryCombiner.cs" />
+        <Compile Include="Collecting\BaseMetrics.cs" />
         <Compile Include="Collecting\CargoMetrics.cs" />
         <Compile Include="Collecting\MachineMetrics.cs" />
         <Compile Include="Collecting\MetricMath.cs" />
         <Compile Include="Collecting\MetricsCollector.cs" />
         <Compile Include="Collecting\ProductFlowMetrics.cs" />
         <Compile Include="Collecting\VehicleMetrics.cs" />
-        <Compile Include="Contracts\Dtos\EntityInfo.cs" />
+        <Compile Include="Contracts\Dtos\MetaInfo.cs" />
         <Compile Include="Contracts\Dtos\ExportSummary.cs" />
         <Compile Include="Contracts\Dtos\LiveSummary.cs" />
         <Compile Include="Contracts\Dtos\MachineSummaryRow.cs" />
@@ -80,7 +85,7 @@
         <Compile Include="Contracts\Ids\ProductId.cs" />
         <Compile Include="Contracts\Ids\RecipeId.cs" />
         <Compile Include="Mapping\EntityTracker.cs" />
-        <Compile Include="Mapping\ExportIdMapper.cs" />
+        <Compile Include="Mapping\IdTracker.cs" />
         <Compile Include="Runtime\ExportScheduler.cs" />
         <Compile Include="Runtime\MetricProfiler.cs" />
         <Compile Include="Runtime\ModRuntime.cs" />

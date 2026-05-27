@@ -11,12 +11,16 @@ public sealed record VehicleSummaryRow(
 
     string? AssignedTo,
     IReadOnlyDictionary<ObservedState, double> UptimePercent,
-    IReadOnlyDictionary<ObservedState, double> UptimeTicks,
+    IReadOnlyDictionary<ObservedState, int> UptimeTicks,
+    
+    double Maintenance,
+    double Power,
+    double Computing,
+    double Workers,
 
     double EmptyTravelDistance,
     double LoadedTravelDistance,
     int DeliveriesCompleted,
-    double FuelConsumed,
 
     IReadOnlyList<ProductFlowSummary> Delivered,
     IReadOnlyList<ProductFlowSummary> Produced,

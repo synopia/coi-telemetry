@@ -21,20 +21,35 @@ export type SummaryMeta = {
 }
 
 
-export const ObservedStates = ['unknown', 'working', 'waiting', 'notEnoughWorkers', 'notEnoughPower', 'notEnoughComputing', 'notEnoughMaintenance', 'notEnoughInput', 'outputFull'] as const
+export const ObservedStates = [
+  'unknown',
+  'working',
+  'idle',
+  'notEnoughInput',
+  'outputFull',
+  'notEnoughWorkers',
+  'notEnoughPower',
+  'notEnoughComputing',
+  'notEnoughMaintenance', ] as const
+
 export type ObservedState = typeof ObservedStates[number]
 
 export type UptimePercent<T extends string> ={
   [K in T]: number
 }
 
-export type MachineSummaryRow={
+export type MachineSummaryRow = {
   machineId: string
   recipeId?: string
-  observedTicks:number
+  observedTicks: number
 
   uptimePercent: UptimePercent<ObservedState>
   uptimeTicks: UptimePercent<ObservedState>
+
+  maintenance: number
+  power: number
+  computing: number
+  workers: number
 
   inputs: ProductFlowSummary[]
   outputs: ProductFlowSummary[]
@@ -65,11 +80,15 @@ export type VehicleSummaryRow = {
   uptimePercent: UptimePercent<ObservedState>
   uptimeTicks: UptimePercent<ObservedState>
 
+  maintenance: number
+  power: number
+  computing: number
+  workers: number
+
   emptyTravelDistance: number
   loadedTravelDistance: number
 
   deliveriesCompleted: number
-  fuelConsumed: number
 
   delivered: ProductFlowSummary[]
   produced: ProductFlowSummary[]

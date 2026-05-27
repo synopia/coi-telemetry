@@ -1,115 +1,84 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using CoiTelemetry.Abstractions;
 using CoiTelemetry.RealMod.Contracts.Dtos;
 using CoiTelemetry.RealMod.Contracts.Enums;
 using CoiTelemetry.RealMod.Contracts.Ids;
 using CoiTelemetry.RealMod.Mapping;
 using Mafi;
+using Mafi.Core.Entities;
 using Mafi.Core.Factory.Machines;
+using Mafi.Core.Factory.Recipes;
 using Mafi.Core.Products;
 
 namespace CoiTelemetry.RealMod.Collecting;
 
-public sealed class MachineMetrics
+public class MachineMetrics : BaseMetrics
 {
-    private readonly EntityTracker _tracker;
-    private readonly IProductFlowMetrics _productFlowMetrics;
     private readonly Machine _machine;
-    
     private readonly EntityId _machineId;
-    private int _observedTicks;
-    private ObservedState _observedState;
-    private RecipeId? _recipeId;
     
-    private readonly Dictionary<ObservedState, double> _stateCounters = new();
-    private readonly Dictionary<ProductId, double> _inputConsumed = new();
-    private readonly Dictionary<ProductId, double> _outputProduced = new();
+    protected RecipeId? RecipeId { get; private set; }
+    private RecipeProto? _recipeProto;
     
-    public MachineMetrics(EntityTracker tracker, IProductFlowMetrics productFlowMetrics, Machine machine)
+    
+    public MachineMetrics(IModContext context, EntityTracker tracker, IProductFlowMetrics productFlowMetrics,Machine machine):base(context, productFlowMetrics,tracker, machine)
     {
-        _tracker = tracker;
-        _productFlowMetrics = productFlowMetrics;
         _machine = machine;
-        
-        _machineId = _tracker.Machine(machine);
-        _stateCounters[ObservedState.NotEnoughPower] = 0;
+        _machineId = Tracker.Machine(machine);
     }
 
-    public void ObserveState()
+    protected override void ObserveState()
     {
-        _observedTicks++;
-        _observedState = GetState();
-        
-        _stateCounters.TryGetValue(_observedState, out var ticks);
-        _stateCounters[_observedState] = ticks + 1;
-
-        var power = _machine.ElectricityConsumer.ValueOrNull;
-        if (power is not null)
-        {
-            _stateCounters[ObservedState.NotEnoughPower] += Math.Min(1, (double)power.PowerCharged.Value / power.PowerRequired.Value);
-        }
         var recipe = _machine.LastRecipeInProgress.ValueOrNull;
         
         if (recipe is not null)
         {
-            _recipeId = _tracker.Recipe(recipe);
-            if(_machine is {WorkedThisTick:true, RecipeProductionTicks:{Ticks:0}})
+            RecipeId = Tracker.Recipe(recipe);
+            _recipeProto = recipe;
+            if(_machine is {WorkedThisTick:true, ProgressPerc.IsNearHundred: true })
             {
                 recipe.AllInputs.ForEach(input =>
                 {
-                    var id = _tracker.Product(input.Product);
-                    AddInputConsumed(id, input.Quantity.Value);
-                    _productFlowMetrics.AddConsumed(id, input.Quantity.Value);
+                    var id = Tracker.Product(input.Product);
+                    AddConsumed(id, input.Quantity.Value);
                 });
                 recipe.AllOutputs.ForEach(output =>
                 {
-                    var id = _tracker.Product(output.Product);
-                    AddOutputProduced(id, output.Quantity.Value);
-                    _productFlowMetrics.AddProduced(id, output.Quantity.Value);
+                    var id = Tracker.Product(output.Product);
+                    AddProduced(id, output.Quantity.Value);
                 });
             }
         }
+        TrackState(FindState());
+        
     }
 
     public MachineSummaryRow BuildSummaryRow()
     {
-        var windowSeconds = SimStep.SECONDS_PER_STEP * _observedTicks;
-
-        var inputFlows = _inputConsumed
-            .Select(x => new ProductFlowSummary(
-                ProductId: x.Key.Value,
-                Amount: x.Value,
-                PerMinute: MetricMath.PerMinute(x.Value, windowSeconds)))
+        var inputBuffers = _recipeProto is not null ? _recipeProto.AllInputs
+            .Select(x => BuildProductBuffer(_machine, x.Product, true))
             .OrderBy(x => x.ProductId)
-            .ToArray();
+            .ToArray() : Array.Empty<ProductBufferSummary>();
 
-        var outputFlows = _outputProduced
-            .Select(x=>new ProductFlowSummary(
-                ProductId:x.Key.Value,
-                Amount:x.Value,
-                PerMinute:MetricMath.PerMinute(x.Value, windowSeconds)))
-            .OrderBy(x=>x.ProductId)
-            .ToArray();
-
-        var inputBuffers = _inputConsumed
-            .Select(x => BuildProductBuffer(_machine, x.Key))
+        var outputBuffers = _recipeProto is not null ? _recipeProto.AllOutputs
+            .Select(x => BuildProductBuffer(_machine, x.Product, false))
             .OrderBy(x => x.ProductId)
-            .ToArray();
-
-        var outputBuffers = _outputProduced
-            .Select(x => BuildProductBuffer(_machine, x.Key))
-            .OrderBy(x => x.ProductId)
-            .ToArray();
+            .ToArray() : Array.Empty<ProductBufferSummary>();
 
         return new MachineSummaryRow(
             MachineId: _machineId.Value,
-            RecipeId: _recipeId?.Value,
-            ObservedTicks: _observedTicks,
-            UptimePercent: MetricMath.Percent(_stateCounters, _observedTicks),
-            UptimeTicks: _stateCounters.ToDictionary(x => x.Key, x => x.Value),
-            Inputs: inputFlows,
-            Outputs: outputFlows,
+            RecipeId: RecipeId?.Value,
+            ObservedTicks: ObservedTicks,
+            UptimePercent: BuildStatePercentages(),
+            UptimeTicks: BuildStateCounters(),
+            Maintenance: Maintenance,
+            Power: Power,
+            Computing: Computing,
+            Workers: Workers,
+            Inputs: BuildConsumeFlow(),
+            Outputs: BuildProduceFlow(),
             InputBuffers: inputBuffers,
             OutputBuffers: outputBuffers,
             PrimaryBlocker: GetPrimaryBlocker()
@@ -117,31 +86,23 @@ public sealed class MachineMetrics
     }
     
     
-    private static ProductBufferSummary BuildProductBuffer(Machine machine, ProductId productId)
+    private ProductBufferSummary BuildProductBuffer(Machine machine, ProductProto product, bool isInput = true)
     {
-        var product = machine.Context.ProtosDb.Get<ProductProto>(productId.CoiId).Value;
-        if (product == null)
-        {
-            return new ProductBufferSummary(productId.Value, 0, 0, 0);
-        }
-
-        var capacity = machine.GetInputCapacityFor(product).Value;
-        var stored = machine.GetInputQuantityFor(product).Value;
+        var id = Tracker.Product(product);
+        var capacity = isInput ? machine.GetInputCapacityFor(product).Value : machine.GetOutputCapacityFor(product).Value;
+        var stored = isInput ? machine.GetInputQuantityFor(product).Value : machine.GetOutputQuantityFor(product).Value;
         var fillPercent = capacity<=0 ? 0 : stored * 100.0 / capacity;
-        return new ProductBufferSummary(ProductId:productId.Value, Capacity:capacity, Stored:stored, FillPercent:fillPercent);
+        return new ProductBufferSummary(ProductId:id.Value, Capacity:capacity, Stored:stored, FillPercent:fillPercent);
     }
-    public void ResetWindow()
+    public override void ResetWindow()
     {
-        _observedTicks = 0;
-        _observedState = ObservedState.Unknown;
+        base.ResetWindow();
 
-        _stateCounters.Clear();
-        _stateCounters[ObservedState.NotEnoughPower] = 0;
-
-        _inputConsumed.Clear();
-        _outputProduced.Clear();
+        RecipeId = null;
+        _recipeProto = null;
     }
-    private ObservedState GetState()
+    
+    private ObservedState FindState()
     {
         switch (_machine.CurrentState)
         {
@@ -149,7 +110,7 @@ public sealed class MachineMetrics
             case Machine.State.Broken:
             case Machine.State.InvalidPlacement:
             case Machine.State.NoRecipes:
-                return ObservedState.Waiting;
+                return ObservedState.Idle;
             case Machine.State.NotEnoughWorkers:
                 return ObservedState.NotEnoughWorkers;
             case Machine.State.NotEnoughPower:
@@ -165,40 +126,5 @@ public sealed class MachineMetrics
             default:
                 return ObservedState.Unknown;
         }
-    }
-    private ObservedState GetPrimaryBlocker()
-    {
-        if (_stateCounters.Count == 0)
-        {
-            return ObservedState.Unknown;
-        }
-        var best = _stateCounters.OrderByDescending(x => x.Value).First();
-        return best.Value <= 0 ? ObservedState.Unknown : best.Key;
-    }
-    private void AddInputConsumed(ProductId productId, double amount)
-    {
-        if (amount <= 0)
-        {
-            return;
-        }
-
-        AddTo(_inputConsumed, productId, amount);
-    }
-
-    private void AddOutputProduced(ProductId productId, double amount)
-    {
-        if (amount <= 0)
-        {
-            return;
-        }
-
-        AddTo(_outputProduced, productId, amount);
-    }
-    
-    
-    private static void AddTo(Dictionary<ProductId, double> dict, ProductId productId, double amount)
-    {
-        dict.TryGetValue(productId, out var current);
-        dict[productId] = current + amount;
     }
 }
