@@ -23,6 +23,7 @@ public sealed record MachineSummaryRow(
 
     IReadOnlyList<ProductBufferSummary> InputBuffers,
     IReadOnlyList<ProductBufferSummary> OutputBuffers,
+    IReadOnlyList<MachinePotentialScenario> PotentialScenarios,
 
     [property:JsonConverter(typeof(StringEnumConverter))]
     ObservedState PrimaryBlocker

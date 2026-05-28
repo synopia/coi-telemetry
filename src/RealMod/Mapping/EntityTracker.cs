@@ -15,6 +15,7 @@ namespace CoiTelemetry.RealMod.Mapping;
 public sealed class EntityTracker(IdTracker ids)
 {
     private readonly Dictionary<string, MetaInfo> _meta = new();
+    private readonly Dictionary<string, ProductProto> _productsById = new();
     public IEnumerable<MetaInfo> Meta => _meta.Values;
     
     public IdTracker Ids => ids;
@@ -99,6 +100,7 @@ public sealed class EntityTracker(IdTracker ids)
     public ProductId Product(ProductProto product)
     {
         var id=ids.Product(product.Id);
+        _productsById[id.Value] = product;
         if (!_meta.ContainsKey(id.Value))
         {
             _meta[id.Value] = new MetaInfo(
@@ -108,6 +110,11 @@ public sealed class EntityTracker(IdTracker ids)
                 );
         }
         return id;
+    }
+
+    public bool TryGetProduct(ProductId productId, out ProductProto product)
+    {
+        return _productsById.TryGetValue(productId.Value, out product!);
     }
 
     public RecipeId? Recipe(RecipeProto? recipe)

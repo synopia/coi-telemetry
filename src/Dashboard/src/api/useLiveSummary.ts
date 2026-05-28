@@ -17,8 +17,10 @@ export const useLiveSummary = () => {
         }
         const json = (await res.json()) as LiveSummary
         if (!cancelled) {
-          setSummary(json)
-          setError(null)
+          if(Object.keys(json).length > 0){
+            setSummary(json)
+            setError(null)
+          }
         }
       } catch (err) {
         if (!cancelled) {

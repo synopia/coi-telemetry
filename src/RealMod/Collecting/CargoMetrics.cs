@@ -44,6 +44,17 @@ public sealed class CargoMetrics
         }
         return _buffers[DeltaIndex].AsEnumerable();
     }
+
+    public void Reset()
+    {
+        foreach (var buffer in _buffers)
+        {
+            buffer.Clear();
+        }
+
+        _index = 0;
+        _initialized = false;
+    }
     
     public void SwapBuffers()
     {

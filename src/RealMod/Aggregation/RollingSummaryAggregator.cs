@@ -25,7 +25,7 @@ public sealed class RollingSummaryAggregator
         }
     }
 
-    public ExportSummary Build(Duration window)
+    public ExportSummary Build(Duration window, bool includeNetworkAnalysis = true)
     {
         var now = _summaries.Last().Meta.Step;
         var cutoff = now - window;
@@ -33,6 +33,10 @@ public sealed class RollingSummaryAggregator
             .Where(x => x.Meta.Step > cutoff)
             .ToArray();
 
-        return SummaryCombiner.Combine(rows, $"{window.Seconds}s_{now.Value:D12}", now);
+        return SummaryCombiner.Combine(
+            rows,
+            $"{window.Seconds}s_{now.Value:D12}",
+            now,
+            includeNetworkAnalysis);
     }
 }

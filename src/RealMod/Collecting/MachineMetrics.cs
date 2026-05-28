@@ -6,21 +6,32 @@ using CoiTelemetry.RealMod.Contracts.Dtos;
 using CoiTelemetry.RealMod.Contracts.Enums;
 using CoiTelemetry.RealMod.Contracts.Ids;
 using CoiTelemetry.RealMod.Mapping;
+using CoiTelemetry.RealMod.Runtime;
 using Mafi;
 using Mafi.Core.Entities;
+using Mafi.Core.Entities.Dynamic;
+using Mafi.Core.Factory.ComputingPower;
+using Mafi.Core.Factory.ElectricPower;
 using Mafi.Core.Factory.Machines;
 using Mafi.Core.Factory.Recipes;
+using Mafi.Core.Maintenance;
+using Mafi.Core.Population;
 using Mafi.Core.Products;
 
 namespace CoiTelemetry.RealMod.Collecting;
 
 public class MachineMetrics : BaseMetrics
 {
+    private const double Epsilon = 0.0001;
     private readonly Machine _machine;
     private readonly EntityId _machineId;
     
     protected RecipeId? RecipeId { get; private set; }
     private RecipeProto? _recipeProto;
+    private RecipeProto? _lastObservedRecipe;
+    private int _lastRecipeProgressTicks;
+    private bool _lastWorkedThisTick;
+    private bool _hasCycleObservation;
     
     
     public MachineMetrics(IModContext context, EntityTracker tracker, IProductFlowMetrics productFlowMetrics,Machine machine):base(context, productFlowMetrics,tracker, machine)
@@ -32,27 +43,11 @@ public class MachineMetrics : BaseMetrics
     protected override void ObserveState()
     {
         var recipe = _machine.LastRecipeInProgress.ValueOrNull;
+        RecipeId = Tracker.Recipe(recipe);
+        _recipeProto = recipe;
         
-        if (recipe is not null)
-        {
-            RecipeId = Tracker.Recipe(recipe);
-            _recipeProto = recipe;
-            if(_machine is {WorkedThisTick:true, ProgressPerc.IsNearHundred: true })
-            {
-                recipe.AllInputs.ForEach(input =>
-                {
-                    var id = Tracker.Product(input.Product);
-                    AddConsumed(id, input.Quantity.Value);
-                });
-                recipe.AllOutputs.ForEach(output =>
-                {
-                    var id = Tracker.Product(output.Product);
-                    AddProduced(id, output.Quantity.Value);
-                });
-            }
-        }
         TrackState(FindState());
-        
+        TrackRecipeCycle(recipe);
     }
 
     public MachineSummaryRow BuildSummaryRow()
@@ -81,6 +76,7 @@ public class MachineMetrics : BaseMetrics
             Outputs: BuildProduceFlow(),
             InputBuffers: inputBuffers,
             OutputBuffers: outputBuffers,
+            PotentialScenarios: BuildPotentialScenarios(),
             PrimaryBlocker: GetPrimaryBlocker()
         );
     }
@@ -94,12 +90,224 @@ public class MachineMetrics : BaseMetrics
         var fillPercent = capacity<=0 ? 0 : stored * 100.0 / capacity;
         return new ProductBufferSummary(ProductId:id.Value, Capacity:capacity, Stored:stored, FillPercent:fillPercent);
     }
+
+    private void TrackRecipeCycle(RecipeProto? recipe)
+    {
+        var progressTicks = _machine.RecipeProductionTicks.Ticks;
+        var workedThisTick = _machine.WorkedThisTick;
+
+        if (_hasCycleObservation && recipe is not null && DidStartRecipeCycle(recipe, progressTicks, workedThisTick))
+        {
+            RecordRecipeCycle(recipe);
+        }
+
+        _hasCycleObservation = true;
+        _lastObservedRecipe = recipe;
+        _lastRecipeProgressTicks = progressTicks;
+        _lastWorkedThisTick = workedThisTick;
+    }
+
+    private bool DidStartRecipeCycle(RecipeProto recipe, int progressTicks, bool workedThisTick)
+    {
+        if (!workedThisTick)
+        {
+            return false;
+        }
+
+        if (_machine.GetTargetDurationFor(recipe).Ticks <= 1)
+        {
+            return true;
+        }
+
+        if (!ReferenceEquals(recipe, _lastObservedRecipe))
+        {
+            return true;
+        }
+
+        if (!_lastWorkedThisTick)
+        {
+            return true;
+        }
+
+        return progressTicks <= _lastRecipeProgressTicks;
+    }
+
+    private void RecordRecipeCycle(RecipeProto recipe)
+    {
+        using (Profiler.Scope("RecordRecipeCycle"))
+        {
+            var utilization = _machine.Utilization;
+
+            foreach (var input in recipe.AllInputs)
+            {
+                var consumed = input.Quantity.ScaledBy(utilization);
+                if (consumed.IsPositive)
+                {
+                    AddConsumed(Tracker.Product(input.Product), consumed.Value);
+                }
+            }
+
+            foreach (var output in recipe.OutputsAtStart)
+            {
+                var produced = output.Quantity.ScaledBy(utilization);
+                if (produced.IsPositive)
+                {
+                    AddProduced(Tracker.Product(output.Product), produced.Value);
+                }
+            }
+
+            foreach (var output in recipe.OutputsAtEnd)
+            {
+                var produced = output.Quantity.ScaledBy(utilization);
+                if (output.Product.Type == VirtualProductProto.ProductType)
+                {
+                    produced = produced.ScaledBy(_machine.VirtualOutputMultiplier);
+                }
+
+                if (produced.IsPositive)
+                {
+                    AddProduced(Tracker.Product(output.Product), produced.Value);
+                }
+            }
+        }
+    }
+
+    private MachinePotentialScenario[] BuildPotentialScenarios()
+    {
+        if (_recipeProto is null)
+        {
+            return Array.Empty<MachinePotentialScenario>();
+        }
+
+        var cycleDuration = _machine.GetTargetDurationFor(_recipeProto);
+        if (cycleDuration.IsNotPositive)
+        {
+            return Array.Empty<MachinePotentialScenario>();
+        }
+
+        var factors = new Dictionary<string, double>
+        {
+            ["maintenance"] = GetResourceFactor(_machine is IMaintainedEntity, Maintenance),
+            ["power"] = GetResourceFactor(_machine is IEntityWithFuelTank or IElectricityConsumingEntity, Power),
+            ["computing"] = GetResourceFactor(_machine is IComputingConsumingEntity, Computing),
+            ["workers"] = GetResourceFactor(_machine is IEntityWithWorkers, Workers),
+        };
+
+        var scenarios = new List<MachinePotentialScenario>();
+        var currentFactor = ComputeCapacityFactor(factors);
+
+        if (currentFactor < 1 - Epsilon)
+        {
+            scenarios.Add(BuildPotentialScenario(
+                "current-local-capacity",
+                "Current local staffing and utilities",
+                currentFactor,
+                cycleDuration));
+        }
+
+        AddFixScenario(scenarios, factors, "maintenance", "Fix maintenance", cycleDuration, currentFactor);
+        AddFixScenario(scenarios, factors, "power", "Fix power", cycleDuration, currentFactor);
+        AddFixScenario(scenarios, factors, "computing", "Fix computing", cycleDuration, currentFactor);
+        AddFixScenario(scenarios, factors, "workers", "Fix workers", cycleDuration, currentFactor);
+
+        scenarios.Add(BuildPotentialScenario(
+            "full-local-capacity",
+            "All local bottlenecks fixed",
+            1,
+            cycleDuration));
+
+        return scenarios.ToArray();
+    }
+
+    private void AddFixScenario(
+        List<MachinePotentialScenario> scenarios,
+        Dictionary<string, double> factors,
+        string factorToIgnore,
+        string label,
+        Duration cycleDuration,
+        double currentFactor)
+    {
+        if (factors[factorToIgnore] >= 1 - Epsilon)
+        {
+            return;
+        }
+
+        var factor = ComputeCapacityFactor(factors, factorToIgnore);
+        if (factor <= currentFactor + Epsilon)
+        {
+            return;
+        }
+
+        scenarios.Add(BuildPotentialScenario(
+            $"fix-{factorToIgnore}",
+            label,
+            factor,
+            cycleDuration));
+    }
+
+    private MachinePotentialScenario BuildPotentialScenario(
+        string scenarioId,
+        string label,
+        double factor,
+        Duration cycleDuration)
+    {
+        var inputs = _recipeProto?.AllInputs
+            .Select(input => BuildPotentialFlow(input.Product, input.Quantity.Value, cycleDuration, factor))
+            .OrderBy(x => x.ProductId)
+            .ToArray() ?? Array.Empty<ProductFlowSummary>();
+
+        var outputs = _recipeProto?.AllOutputs
+            .Select(output => BuildPotentialFlow(output.Product, output.Quantity.Value, cycleDuration, factor))
+            .OrderBy(x => x.ProductId)
+            .ToArray() ?? Array.Empty<ProductFlowSummary>();
+
+        return new MachinePotentialScenario(
+            ScenarioId: scenarioId,
+            Label: label,
+            Factor: factor,
+            Inputs: inputs,
+            Outputs: outputs);
+    }
+
+    private ProductFlowSummary BuildPotentialFlow(ProductProto product, double quantityPerCycle, Duration cycleDuration, double factor)
+    {
+        var productId = Tracker.Product(product);
+        var cycleSeconds = cycleDuration.Seconds.ToDouble();
+        var perMinuteAtFullCapacity = MetricMath.PerMinute(quantityPerCycle, cycleSeconds);
+        var perMinute = perMinuteAtFullCapacity * factor;
+        var amount = perMinute * ObservedSeconds / 60.0;
+        return new ProductFlowSummary(
+            ProductId: productId.Value,
+            Amount: amount,
+            PerMinute: perMinute);
+    }
+
+    private static double GetResourceFactor(bool isApplicable, double value)
+    {
+        return !isApplicable
+            ? 1
+            : Math.Max(0, Math.Min(1, value));
+    }
+
+    private static double ComputeCapacityFactor(IReadOnlyDictionary<string, double> factors, string? ignoredFactor = null)
+    {
+        var factor = 1.0;
+        foreach (var kv in factors)
+        {
+            if (kv.Key == ignoredFactor)
+            {
+                continue;
+            }
+
+            factor = Math.Min(factor, kv.Value);
+        }
+
+        return factor;
+    }
+
     public override void ResetWindow()
     {
         base.ResetWindow();
-
-        RecipeId = null;
-        _recipeProto = null;
     }
     
     private ObservedState FindState()

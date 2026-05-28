@@ -6,18 +6,13 @@ using CoiTelemetry.RealMod.Contracts.Dtos;
 using CoiTelemetry.RealMod.Contracts.Enums;
 using CoiTelemetry.RealMod.Contracts.Ids;
 using CoiTelemetry.RealMod.Mapping;
+using CoiTelemetry.RealMod.Runtime;
 using Mafi;
 using Mafi.Core;
-using Mafi.Core.Buildings.Mine;
-using Mafi.Core.Buildings.Storages;
 using Mafi.Core.Entities;
 using Mafi.Core.Entities.Dynamic;
-using Mafi.Core.PathFinding.Goals;
-using Mafi.Core.Population;
-using Mafi.Core.Prototypes;
 using Mafi.Core.Vehicles;
 using Mafi.Core.Vehicles.Excavators;
-using Mafi.Core.Vehicles.Jobs;
 using Mafi.Core.Vehicles.TreeHarvesters;
 using Mafi.Core.Vehicles.Trucks;
 using EntityId = CoiTelemetry.RealMod.Contracts.Ids.EntityId;
@@ -44,14 +39,17 @@ public abstract class VehicleMetrics : BaseMetrics
             return new TreeHarvesterMetrics(context, productFlowMetrics, tracker, treeHarvester);
         }
         
-        throw new ArgumentException($"Unsupported vehicle type: {vehicle.GetType().Name}", nameof(vehicle));
+        return new GenericVehicleMetrics(context, productFlowMetrics, tracker, vehicle);
     }
     
     private readonly Vehicle _vehicle;
     private readonly EntityId _vehicleId;
+    protected Vehicle TrackedVehicle => _vehicle;
     
     protected EntityId? AssignedToId {get; private set;}
     protected string? CurrentGoal { get; set;}
+    protected string? CurrentJobType { get; private set; }
+    protected string? CurrentJobInfo { get; private set; }
     protected int DeliveriesCompleted { get; set; }
 
     private double _distanceEmpty;
@@ -60,8 +58,10 @@ public abstract class VehicleMetrics : BaseMetrics
     
     private readonly CargoMetrics _cargo = new();
     private readonly Dictionary<ProductId, double> _deliveredByProduct = new();
+    private readonly Dictionary<VehicleBlockerKind, int> _blockerCounters = new();
     
     private readonly Dictionary<string, int> _jobsInfo = new();
+    private ObservedState _lastObservedState;
     
     protected bool IsDelivering { get; init; } = false;
     protected bool IsProducing { get; init; } = false;
@@ -86,6 +86,71 @@ public abstract class VehicleMetrics : BaseMetrics
 
 
     protected abstract ObservedState FindState();
+    protected virtual VehicleBlockerKind FindBlocker(ObservedState state)
+    {
+        using (Profiler.Scope("FindBlocker"))
+        {
+
+
+            if (TrackedVehicle.CannotWorkDueToLowFuel || TrackedVehicle.NeedsRefueling)
+            {
+                return TrackedVehicle.LastRefuelRequestIssue switch
+                {
+                    RefuelRequestIssue.FailedAsUnreachable => VehicleBlockerKind.RefuelUnreachable,
+                    RefuelRequestIssue.Failed => VehicleBlockerKind.RefuelRequestFailed,
+                    _ => VehicleBlockerKind.NeedsFuel,
+                };
+            }
+
+            if (TrackedVehicle.IsStuck)
+            {
+                return VehicleBlockerKind.Stuck;
+            }
+
+            if (TrackedVehicle.IsStrugglingToNavigate)
+            {
+                return VehicleBlockerKind.StrugglingToNavigate;
+            }
+
+            if (TrackedVehicle.PfState == PathFindingEntityState.PathFinding)
+            {
+                return VehicleBlockerKind.PathFinding;
+            }
+
+            if (TrackedVehicle.PfState == PathFindingEntityState.WaitingForRoadExit)
+            {
+                return VehicleBlockerKind.WaitingForRoadExit;
+            }
+
+            if (TrackedVehicle.NavigationFailed || TrackedVehicle.UnreachableGoal.HasValue)
+            {
+                return VehicleBlockerKind.GoalUnreachable;
+            }
+
+            return state switch
+            {
+                ObservedState.NotEnoughMaintenance => VehicleBlockerKind.NotEnoughMaintenance,
+                ObservedState.NotEnoughWorkers => VehicleBlockerKind.NotEnoughWorkers,
+                ObservedState.NotEnoughComputing => VehicleBlockerKind.NotEnoughComputing,
+                ObservedState.Idle when TrackedVehicle.NeedsJob => VehicleBlockerKind.NoJob,
+                _ => VehicleBlockerKind.None,
+            };
+        }
+    }
+
+    private void TrackBlocker(VehicleBlockerKind blocker)
+    {
+        using (Profiler.Scope("TrackBlocker"))
+        {
+            if (blocker == VehicleBlockerKind.None)
+            {
+                return;
+            }
+
+            _blockerCounters.TryGetValue(blocker, out var ticks);
+            _blockerCounters[blocker] = ticks + SampleTicks;
+        }
+    }
     
     protected override void ObserveState()
     {
@@ -99,14 +164,32 @@ public abstract class VehicleMetrics : BaseMetrics
         _totalDistance = totalDistance;
 
         var currentJob = _vehicle.CurrentJob.ValueOrNull;
-        // if (currentJob is not null)
-        // {
-        //     var msg = $"{currentJob.GetType()}({currentJob.JobInfo.Value})";
-        //     _jobsInfo.TryGetValue(msg, out var count);
-        //     _jobsInfo[msg] = count + 1;
-        // }
-        
-        TrackState(FindState());
+        CurrentJobType = currentJob?.GetType().Name;
+        CurrentJobInfo = string.IsNullOrWhiteSpace(TrackedVehicle.CurrentJobInfo.Value)
+            ? null
+            : TrackedVehicle.CurrentJobInfo.Value;
+        if (currentJob is not null)
+        {
+            var jobKey = CurrentJobType ?? currentJob.GetType().Name;
+            _jobsInfo.TryGetValue(jobKey, out var count);
+            _jobsInfo[jobKey] = count + SampleTicks;
+        }
+
+        ObservedState state;
+        using (Profiler.Scope("FindState"))
+        {
+            state = FindState();
+        }
+        _lastObservedState = state;
+        using (Profiler.Scope("TrackState"))
+        {
+            TrackState(state);
+        }
+
+        using (Profiler.Scope("Track and FindBlocker"))
+        {
+            TrackBlocker(FindBlocker(state));
+        }
     }
 
     protected override void AfterObserveState()
@@ -142,6 +225,10 @@ public abstract class VehicleMetrics : BaseMetrics
         base.ResetWindow();
 
         _jobsInfo.Clear();
+        _blockerCounters.Clear();
+        CurrentGoal = null;
+        CurrentJobType = null;
+        CurrentJobInfo = null;
         DeliveriesCompleted = 0;
         _distanceEmpty = 0;
         _distanceLoaded = 0;
@@ -163,12 +250,14 @@ public abstract class VehicleMetrics : BaseMetrics
             VehicleId: _vehicleId.Value,
             AssignedTo: AssignedToId?.Value,
             ObservedTicks: ObservedTicks,
+            UptimePercent: BuildStatePercentages(),
+            UptimeTicks: BuildStateCounters(),
+            BlockerPercent: MetricMath.Percent(_blockerCounters, ObservedTicks),
+            BlockerTicks: _blockerCounters.ToDictionary(x => x.Key, x => x.Value),
             Maintenance: Maintenance,
             Power: Power,
             Computing: Computing,
             Workers: Workers,
-            UptimePercent: BuildStatePercentages(),
-            UptimeTicks: BuildStateCounters(),
             DeliveriesCompleted: DeliveriesCompleted,
             EmptyTravelDistance: _distanceEmpty,
             LoadedTravelDistance: _distanceLoaded,
@@ -176,8 +265,25 @@ public abstract class VehicleMetrics : BaseMetrics
             Delivered: delivered,
             Produced: BuildProduceFlow(),
             Consumed: BuildConsumeFlow(),
+            CurrentJob: CurrentJobType,
+            CurrentJobInfo: CurrentJobInfo,
+            CurrentGoal: CurrentGoal,
+            PathFindingState: TrackedVehicle.PfState.ToString(),
+            DrivingState: TrackedVehicle.DrivingState.ToString(),
+            PrimaryDetailedBlocker: GetPrimaryBlockerKind(),
             PrimaryBlocker: GetPrimaryBlocker()
         );
+    }
+
+    private VehicleBlockerKind GetPrimaryBlockerKind()
+    {
+        var best = _blockerCounters
+            .OrderByDescending(x => x.Value)
+            .FirstOrDefault();
+
+        return best.Value <= 0
+            ? VehicleBlockerKind.None
+            : best.Key;
     }
 
     protected void AddMovedDistance(double distance, bool loaded)
@@ -211,6 +317,35 @@ public abstract class VehicleMetrics : BaseMetrics
         }
         AddTo(_deliveredByProduct, productId, amount);
     }
+
+    protected override int RecommendNextUpdateTicks()
+    {
+        if (_lastObservedState != ObservedState.Working)
+        {
+            return 1;
+        }
+
+        if (TrackedVehicle.CannotWorkDueToLowFuel
+            || TrackedVehicle.NeedsRefueling
+            || TrackedVehicle.IsStuck
+            || TrackedVehicle.IsStrugglingToNavigate
+            || TrackedVehicle.NavigationFailed
+            || TrackedVehicle.UnreachableGoal.HasValue
+            || TrackedVehicle.PfState == PathFindingEntityState.PathFinding
+            || TrackedVehicle.PfState == PathFindingEntityState.WaitingForRoadExit)
+        {
+            return 1;
+        }
+
+        if (!TrackedVehicle.IsDriving)
+        {
+            return 1;
+        }
+
+        return TrackedVehicle.DrivingState == DrivingState.DrivingForwardsOnRoad
+            ? 5
+            : 3;
+    }
 }
 
 public sealed class TruckMetrics : VehicleMetrics
@@ -230,13 +365,18 @@ public sealed class TruckMetrics : VehicleMetrics
 
         if (AssignedToId is not null)
         {
-            if( _truck is { IsDriving: false, IsFull: true } )
+            if (!_truck.IsDriving && _truck.IsFull)
             {
                 // truck is assigned, full cargo and is not driving 
                 // so it waits to deliver cargo
                 return ObservedState.OutputFull;
             }
-            // all other cases the truck is counted as working
+
+            if (!_truck.IsDriving && _truck.Cargo.TotalQuantity.Value <= 0)
+            {
+                return ObservedState.NotEnoughInput;
+            }
+
             return ObservedState.Working;
         }
 
@@ -257,6 +397,21 @@ public sealed class TruckMetrics : VehicleMetrics
         }
 
         return ObservedState.NotEnoughInput;
+    }
+
+    protected override VehicleBlockerKind FindBlocker(ObservedState state)
+    {
+        if (_truck.IsCannotDeliverNotificationActive)
+        {
+            return VehicleBlockerKind.CannotDeliverCargo;
+        }
+
+        return state switch
+        {
+            ObservedState.NotEnoughInput => VehicleBlockerKind.WaitingForPickup,
+            ObservedState.OutputFull => VehicleBlockerKind.WaitingForUnload,
+            _ => base.FindBlocker(state),
+        };
     }
 }
 
@@ -291,6 +446,21 @@ public sealed class ExcavatorMetrics : VehicleMetrics
                 return ObservedState.Unknown;
         }    
     }
+
+    protected override VehicleBlockerKind FindBlocker(ObservedState state)
+    {
+        if (_excavator.State == ExcavatorState.WaitingForTruck)
+        {
+            if (_excavator.TruckQueue.TrucksCount == 0)
+            {
+                return VehicleBlockerKind.NoTruckAvailable;
+            }
+
+            return VehicleBlockerKind.WaitingForTruck;
+        }
+
+        return base.FindBlocker(state);
+    }
 }
 
 public sealed class TreeHarvesterMetrics : VehicleMetrics
@@ -316,5 +486,51 @@ public sealed class TreeHarvesterMetrics : VehicleMetrics
             default:
                 return ObservedState.Working;
         }
+    }
+
+    protected override VehicleBlockerKind FindBlocker(ObservedState state)
+    {
+        if (_treeHarvester.Cargo.Quantity.IsPositive && _treeHarvester.VehiclesTotal() == 0)
+        {
+            return VehicleBlockerKind.NoTruckAvailable;
+        }
+
+        if (_treeHarvester.State == TreeHarvesterState.TreeIsUp)
+        {
+            return VehicleBlockerKind.WaitingForTruck;
+        }
+
+        if (_treeHarvester.State == TreeHarvesterState.Idle && _treeHarvester.DidNotFindTreeToHarvest)
+        {
+            return VehicleBlockerKind.NoHarvestTarget;
+        }
+
+        return base.FindBlocker(state);
+    }
+}
+
+public sealed class GenericVehicleMetrics : VehicleMetrics
+{
+    public GenericVehicleMetrics(
+        IModContext context,
+        IProductFlowMetrics productFlowMetrics,
+        EntityTracker tracker,
+        Vehicle vehicle) : base(context, productFlowMetrics, tracker, vehicle)
+    {
+    }
+
+    protected override ObservedState FindState()
+    {
+        if (AssignedToId is not null || TrackedVehicle.IsDriving || TrackedVehicle.CurrentJob.ValueOrNull is not null)
+        {
+            return ObservedState.Working;
+        }
+
+        if (TrackedVehicle.NeedsJob)
+        {
+            return ObservedState.Idle;
+        }
+
+        return ObservedState.Unknown;
     }
 }

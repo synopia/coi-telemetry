@@ -17,6 +17,10 @@ namespace CoiTelemetry.RealMod.Runtime;
 
 public sealed class ExportScheduler :  IDisposable
 {
+    private static readonly Duration Window1mRefreshInterval = Duration.FromSec(2);
+    private static readonly Duration Window5mRefreshInterval = Duration.FromSec(10);
+    private static readonly Duration Window10mRefreshInterval = Duration.FromSec(5);
+
     private readonly MetricsCollector _collector;
     private readonly ISimLoopEvents _events;
     private readonly IModContext _context;
@@ -26,8 +30,13 @@ public sealed class ExportScheduler :  IDisposable
     private LiveDataHub _liveData;
     private ModWebserver _webServer;
     private readonly IEntitiesManager _entitiesManager;
-    private MetricCollectionProfiler _profiler = new ();
     private DateTime _lastDebug = DateTime.UtcNow;
+    private ExportSummary? _cachedWindow1m;
+    private ExportSummary? _cachedWindow5m;
+    private ExportSummary? _cachedWindow10m;
+    private SimStep _lastWindow1mBuild;
+    private SimStep _lastWindow5mBuild;
+    private SimStep _lastWindow10mBuild;
     
     public ExportScheduler(IModContext context, IEntitiesManager entitiesManager,ISimLoopEvents events)
     {
@@ -49,21 +58,11 @@ public sealed class ExportScheduler :  IDisposable
         {
             return;
         }
+        Profiler.NewFrame();
 
-        using (_profiler.Measure())
+        using (Profiler.Scope("ObserveSimulationTick"))
         {
             _collector.ObserveSimulationTick();
-        }
-
-        if( DateTime.UtcNow - _lastDebug > TimeSpan.FromSeconds(10))
-        {
-            _lastDebug = DateTime.UtcNow;
-            var perf = _profiler.GetSnapshotAndReset();
-            _context.Logger.Info(
-                $"Metric collection: {perf.CollectionCpuPercentApprox:F3}% " +
-                $"({perf.CollectionSeconds * 1000:F2}ms / {perf.WallSeconds:F2}s, " +
-                $"avg {perf.AvgCollectionMs:F4}ms/call, calls {perf.CollectionCalls})"
-                );
         }
         
         var now = _events.CurrentStep;
@@ -72,22 +71,98 @@ public sealed class ExportScheduler :  IDisposable
         {
             return;
         }
+        using (Profiler.Scope("Frame"))
+        {
 
-        var summary10s = _collector.BuildSummary();
-        _aggregator.Add(summary10s);
+            ExportSummary summary10s;
+            using (Profiler.Scope("BuildSummary"))
+            {
+                summary10s = _collector.BuildSummary(includeNetworkAnalysis: false);
+            }
 
-        var liveSummary = new LiveSummary(
-            Window10s: summary10s,
-            Window1m: _aggregator.Build(Duration.FromMin(1)),
-            Window5m: _aggregator.Build(Duration.FromMin(5)),
-            Window10m: _aggregator.Build(Duration.FromMin(10))
-        );
-        _liveData.UpdateLatest(liveSummary);
-        
-        _collector.ResetWindowCounters();
+            using (Profiler.Scope("AddSummary"))
+            {
+                _aggregator.Add(summary10s);
+            }
+
+            ExportSummary window1m;
+            using (Profiler.Scope("BuildWindow1m"))
+            {
+                window1m = BuildCachedWindow(
+                    window: Duration.FromMin(1),
+                    currentStep: now,
+                    refreshInterval: Window1mRefreshInterval,
+                    includeNetworkAnalysis: false,
+                    ref _cachedWindow1m,
+                    ref _lastWindow1mBuild);
+            }
+            ExportSummary window5m;
+            using (Profiler.Scope("BuildWindow5m"))
+            {
+                window5m = BuildCachedWindow(
+                    window: Duration.FromMin(5),
+                    currentStep: now,
+                    refreshInterval: Window5mRefreshInterval,
+                    includeNetworkAnalysis: false,
+                    ref _cachedWindow5m,
+                    ref _lastWindow5mBuild);
+            }
+
+            ExportSummary window10m;
+            using (Profiler.Scope("BuildWindow10m"))
+            {
+                window10m = BuildCachedWindow(
+                    window: Duration.FromMin(10),
+                    currentStep: now,
+                    refreshInterval: Window10mRefreshInterval,
+                    includeNetworkAnalysis: true,
+                    ref _cachedWindow10m,
+                    ref _lastWindow10mBuild);
+            }
+            
+            var liveSummary = new LiveSummary(
+                Metadata: _collector.BuildMetadata(),
+                Window10s: summary10s,
+                Window1m: window1m,
+                Window5m: window5m,
+                Window10m: window10m
+            );
+            using (Profiler.Scope("UpdateLatest"))
+            {
+                // _liveData.UpdateLatest(liveSummary);
+            }
+
+            using (Profiler.Scope("ResetWindowCounters"))
+            {
+                _collector.ResetWindowCounters();
+            }
+            
+        }
+
+        if (DateTime.UtcNow - _lastDebug > TimeSpan.FromSeconds(10))
+        {
+            _lastDebug = DateTime.UtcNow;
+            _context.Logger.Info(Profiler.Dump());
+        }
         _lastExport = now;
+    }
 
-        
+    private ExportSummary BuildCachedWindow(
+        Duration window,
+        SimStep currentStep,
+        Duration refreshInterval,
+        bool includeNetworkAnalysis,
+        ref ExportSummary? cachedSummary,
+        ref SimStep lastBuildStep)
+    {
+        if (cachedSummary is not null && currentStep - lastBuildStep < refreshInterval)
+        {
+            return cachedSummary;
+        }
+
+        cachedSummary = _aggregator.Build(window, includeNetworkAnalysis);
+        lastBuildStep = currentStep;
+        return cachedSummary;
     }
 
     private void Debug()
@@ -122,8 +197,8 @@ public sealed class ExportScheduler :  IDisposable
     public void Dispose()
     {
         _webServer.Dispose();
+        _collector.Dispose();
         
         // _liveData.Dispose();
-        // _collector.Dispose();
     }
 }

@@ -6,6 +6,7 @@ using CoiTelemetry.RealMod.Contracts.Dtos;
 using CoiTelemetry.RealMod.Contracts.Enums;
 using CoiTelemetry.RealMod.Contracts.Ids;
 using CoiTelemetry.RealMod.Mapping;
+using CoiTelemetry.RealMod.Runtime;
 using Mafi;
 using Mafi.Core.Entities;
 using Mafi.Core.Entities.Dynamic;
@@ -24,9 +25,13 @@ public abstract class BaseMetrics
     protected readonly EntityTracker Tracker;
     private readonly IProductFlowMetrics _flowMetrics;
     private readonly Entity Entity;
+    private bool _hasObservedStep;
+    private int _lastObservedStepValue;
+    private int _nextObservationStepValue;
     
     protected int ObservedTicks { get; set; }
     protected double ObservedSeconds => ObservedTicks * SimStep.SECONDS_PER_STEP;
+    protected int SampleTicks { get; private set; } = 1;
     private readonly Dictionary<ObservedState, int> _stateCounters = new();
     protected double Maintenance { get; set; }
     protected double Power { get; set; }
@@ -45,96 +50,176 @@ public abstract class BaseMetrics
         Entity = entity;
     }
 
+    public bool ShouldUpdate(SimStep currentStep)
+    {
+        return !_hasObservedStep || currentStep.Value >= _nextObservationStepValue;
+    }
+
     protected void TrackState(ObservedState state)
     {
         _stateCounters.TryGetValue(state, out var ticks);
-        _stateCounters[state] = ticks + 1;
+        _stateCounters[state] = ticks + SampleTicks;
     }
     
     protected abstract void ObserveState();
+    protected virtual int RecommendNextUpdateTicks() => 1;
 
     protected virtual void AfterObserveState()
     {
-        Usage.SwapBuffers();
+        using (Profiler.Scope("SwapBuffers"))
+        {
+            Usage.SwapBuffers();
+        }
+        
         foreach (var kv in Usage.GetDelta())
         {
             if (kv.Value < 0)
             {
-                AddConsumed(kv.Key, -kv.Value);
+                using (Profiler.Scope("AddConsumed"))
+                {
+                    AddConsumed(kv.Key, -kv.Value);
+                }
             }
         }
     }
-    public void Update()
+
+    public void Update(SimStep currentStep)
     {
-        ObservedTicks++;
+        using (Profiler.Scope("ObserveAt"))
+        {
+            ObserveAt(currentStep);
+        }
+    }
+
+    public void Flush(SimStep currentStep)
+    {
+        if (_hasObservedStep && _lastObservedStepValue == currentStep.Value)
+        {
+            return;
+        }
+
+        ObserveAt(currentStep);
+    }
+
+    private void ObserveAt(SimStep currentStep)
+    {
+        SampleTicks = !_hasObservedStep
+            ? 1
+            : Math.Max(1, currentStep.Value - _lastObservedStepValue);
+        _hasObservedStep = true;
+        _lastObservedStepValue = currentStep.Value;
+        ObservedTicks += SampleTicks;
+
         if (Entity is IMaintainedEntity maintainedEntity)
         {
-            var maintenanceStatus = maintainedEntity.Maintenance.Status;
-            Maintenance = Math.Min(1, maintenanceStatus.MaintenancePointsCurrent.Value.ToDouble() /
-                                      maintenanceStatus.MaintenancePointsMax.Value.ToDouble());
-            if (!maintainedEntity.Maintenance.CanWork())
+            using (Profiler.Scope("ObserveMaintenance"))
             {
-                TrackState(ObservedState.NotEnoughMaintenance);
+                var maintenanceStatus = maintainedEntity.Maintenance.Status;
+                var maintenanceMax = maintenanceStatus.MaintenancePointsMax.Value.ToDouble();
+                Maintenance = maintenanceMax <= 0
+                    ? 1
+                    : Math.Min(1, maintenanceStatus.MaintenancePointsCurrent.Value.ToDouble() / maintenanceMax);
+                if (!maintainedEntity.Maintenance.CanWork())
+                {
+                    TrackState(ObservedState.NotEnoughMaintenance);
+                }
+
+                Usage.Set(Tracker.Ids.Product(Ids.Products.MaintenanceT1), Maintenance);
             }
-            Usage.Set(Tracker.Ids.Product(Ids.Products.MaintenanceT1), Maintenance);
         }
 
         if (Entity is IEntityWithFuelTank fuelTankEntity)
         {
-            var fuelTank = fuelTankEntity.FuelTank.ValueOrNull;
-            if (fuelTank is not null)
+            using (Profiler.Scope("ObserveFuel"))
             {
-                Power =  (double)fuelTank.RemainingDuration.Ticks/(fuelTank.Proto.OneQuantityDuration.Ticks*fuelTank.Proto.Capacity.Value);
-                if (((FuelTank)fuelTank).IsEmpty)
+                var fuelTank = fuelTankEntity.FuelTank.ValueOrNull;
+                if (fuelTank is not null)
                 {
-                    TrackState(ObservedState.NotEnoughPower);
+                    var maxDurationTicks = fuelTank.Proto.OneQuantityDuration.Ticks * fuelTank.Proto.Capacity.Value;
+                    Power = maxDurationTicks <= 0
+                        ? 1
+                        : (double)fuelTank.RemainingDuration.Ticks / maxDurationTicks;
+                    if (((FuelTank)fuelTank).IsEmpty)
+                    {
+                        TrackState(ObservedState.NotEnoughPower);
+                    }
+
+                    Usage.Set(Tracker.Product(fuelTank.Proto.Product),
+                        (double)fuelTank.RemainingDuration.Ticks / fuelTank.Proto.OneQuantityDuration.Ticks);
                 }
-                Usage.Set(Tracker.Product(fuelTank.Proto.Product), (double)fuelTank.RemainingDuration.Ticks/fuelTank.Proto.OneQuantityDuration.Ticks);
             }
         }
         
         if (Entity is IElectricityConsumingEntity electricityConsumingEntity)
         {
-            var power =(ElectricityConsumer?) electricityConsumingEntity.ElectricityConsumer.ValueOrNull;
-            if (power is not null)
+            using (Profiler.Scope("ObservePower"))
             {
-                if (!power.NotEnoughPower)
+
+
+                var power = (ElectricityConsumer?)electricityConsumingEntity.ElectricityConsumer.ValueOrNull;
+                if (power is not null)
                 {
-                    Power = 1;
-                    AddConsumed(Tracker.Ids.Product(Ids.Products.Electricity), power.PowerRequired.Value);
+                    if (!power.NotEnoughPower)
+                    {
+                        Power = 1;
+                        AddConsumed(Tracker.Ids.Product(Ids.Products.Electricity),
+                            power.PowerRequired.Value * SampleTicks);
+                    }
+                    else
+                    {
+                        Power = 0;
+                        TrackState(ObservedState.NotEnoughPower);
+                    }
+
                 }
-                else
-                {
-                    Power = 0;
-                    TrackState(ObservedState.NotEnoughPower);
-                }
-                
             }
         }
 
         if (Entity is IComputingConsumingEntity computingConsumingEntity)
         {
-            var computing = computingConsumingEntity.ComputingConsumer.ValueOrNull;
-            Computing = computing is null ? 0 : Math.Min(1, (double)computing.ComputingCharged.Value / computing.ComputingRequired.Value);
-            if (computing?.NotEnoughComputing == true)
+            using (Profiler.Scope("ObserveComputing"))
             {
-                TrackState(ObservedState.NotEnoughComputing);
+                var computing = computingConsumingEntity.ComputingConsumer.ValueOrNull;
+                Computing = computing is null
+                    ? 0
+                    : computing.ComputingRequired.Value <= 0
+                        ? 1
+                        : Math.Min(1, (double)computing.ComputingCharged.Value / computing.ComputingRequired.Value);
+                if (computing?.NotEnoughComputing == true)
+                {
+                    TrackState(ObservedState.NotEnoughComputing);
+                }
+
+                Usage.Set(Tracker.Ids.Product(Ids.Products.Computing), Computing);
             }
-            Usage.Set(Tracker.Ids.Product(Ids.Products.Computing), Computing);
         }
 
         if (Entity is IEntityWithWorkers workersEntity)
         {
-            Workers = (double)workersEntity.WorkersAssigned()/workersEntity.WorkersNeeded;
-            if (Workers < 1)
+            using (Profiler.Scope("ObserveWorkers"))
             {
-                TrackState(ObservedState.NotEnoughWorkers);
+                Workers = workersEntity.WorkersNeeded <= 0
+                    ? 1
+                    : (double)workersEntity.WorkersAssigned() / workersEntity.WorkersNeeded;
+                if (Workers < 1)
+                {
+                    TrackState(ObservedState.NotEnoughWorkers);
+                }
             }
         }
 
-        ObserveState();
+        using (Profiler.Scope("ObserveState"))
+        {
+            ObserveState();
+        }
 
-        AfterObserveState();
+        using (Profiler.Scope("AfterObserveState"))
+        {
+            AfterObserveState();
+        }
+
+        _nextObservationStepValue = currentStep.Value + Math.Max(1, RecommendNextUpdateTicks());
+        SampleTicks = 1;
     }
 
     public virtual void ResetWindow()

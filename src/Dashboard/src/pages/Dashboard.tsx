@@ -3,6 +3,8 @@ import Breadcrumbs from '@/components/layout/Breadcrumbs'
 import { useLiveSummary } from '@/api/useLiveSummary.ts'
 import { BottleneckHeatmapChart, toBottleneckRows } from '@/pages/BottleneckHeatmapChart.tsx'
 import { NetAmountChart } from '@/pages/NetAmountChart.tsx'
+import { DependencyOpportunities } from '@/pages/DependencyOpportunities.tsx'
+import { ImpactSimulationCard } from '@/pages/ImpactSimulationCard.tsx'
 
 const WorstMachines = () => {
   const { summary, error } = useLiveSummary()
@@ -134,13 +136,10 @@ export default function Dashboard() {
         </Card>
 
         {/* Profit vs Expenses */}
-        <Card>
-          <CardHeader>
-            <CardTitle>Profit vs Expenses</CardTitle>
-          </CardHeader>
-          <CardContent>
-          </CardContent>
-        </Card>
+        {summary && <DependencyOpportunities summary={summary} />}
+      </div>
+      <div className="grid grid-cols-1 lg:grid-cols-1 gap-6 mb-6">
+        {summary && <ImpactSimulationCard summary={summary} />}
       </div>
 
       {/* Tables */}

@@ -5,24 +5,30 @@ using CoiTelemetry.Abstractions;
 using CoiTelemetry.RealMod.Contracts.Dtos;
 using CoiTelemetry.RealMod.Contracts.Ids;
 using CoiTelemetry.RealMod.Mapping;
-using Mafi.Core.Buildings.Storages;
+using CoiTelemetry.RealMod.Runtime;
 using Mafi.Core.Entities;
 using Mafi.Core.Entities.Dynamic;
 using Mafi.Core.Factory.Machines;
+using Mafi.Core.Products;
 using Mafi.Core.Simulation;
 
 namespace CoiTelemetry.RealMod.Collecting;
 
-public sealed class MetricsCollector:IProductFlowMetrics
+public sealed class MetricsCollector : IProductFlowMetrics, IDisposable
 {
+    private readonly IModContext _context;
     private readonly EntityTracker _tracker;
     private readonly IEntitiesManager _entitiesManager;
     private readonly ISimLoopEvents _events;
+    private readonly IProductsManager _productsManager;
 
-    private readonly Dictionary<EntityId, MachineMetrics> _machines = new();
-    private readonly Dictionary<EntityId, VehicleMetrics> _vehicles = new();
+    private readonly Dictionary<Mafi.Core.EntityId, MachineMetrics> _machines = new();
+    private readonly Dictionary<Mafi.Core.EntityId, VehicleMetrics> _vehicles = new();
     private readonly Dictionary<ProductId, ProductFlowMetrics> _products = new();
-    private readonly IModContext _context; 
+    private MachineMetrics[] _machineSnapshot = Array.Empty<MachineMetrics>();
+    private VehicleMetrics[] _vehicleSnapshot = Array.Empty<VehicleMetrics>();
+    private bool _machineSnapshotDirty = true;
+    private bool _vehicleSnapshotDirty = true;
     private int _windowObservedTicks;
     
     public MetricsCollector(IModContext context, IEntitiesManager entitiesManager, ISimLoopEvents events)
@@ -30,49 +36,116 @@ public sealed class MetricsCollector:IProductFlowMetrics
         _context = context;
         _entitiesManager = entitiesManager;
         _events = events;
+        _productsManager = context.Resolver.Resolve<IProductsManager>();
         _tracker = new EntityTracker(new IdTracker());
+
+        InitializeTrackedEntities();
+        _entitiesManager.EntityAdded.Add<MetricsCollector>(this, OnEntityAdded);
+        _entitiesManager.EntityRemoved.Add<MetricsCollector>(this, OnEntityRemoved);
     }
     
     public void ObserveSimulationTick()
     {
         _windowObservedTicks++;
 
-        ObserveMachines();
-        ObserveVehicles();
+        using (Profiler.Scope("ObserveMachines"))
+        {
+            ObserveMachines();
+        }
+
+        using (Profiler.Scope("ObserveVehicles"))
+        {
+            ObserveVehicles();
+        }
     }
 
     private void ObserveMachines()
     {
-        foreach (var machine in _entitiesManager.GetAllEntitiesOfType<Machine>())
+        RefreshSnapshotsIfNeeded();
+        var currentStep = _events.CurrentStep;
+        foreach (var metrics in _machineSnapshot)
         {
-            var metrics = GetMachineMetrics(machine);
-            metrics.Update();
+            if (metrics.ShouldUpdate(currentStep))
+            {
+                metrics.Update(currentStep);
+            }
         }
     }
 
     private void ObserveVehicles()
     {
-        foreach (var vehicle in _entitiesManager.GetAllEntitiesOfType<Vehicle>())
+        RefreshSnapshotsIfNeeded();
+        var currentStep = _events.CurrentStep;
+        foreach (var metrics in _vehicleSnapshot)
         {
-            var metrics = GetVehicleMetrics(vehicle);
-            metrics.Update();
+            if (metrics.ShouldUpdate(currentStep))
+            {
+                metrics.Update(currentStep);
+            }
         }
     }
 
-    public ExportSummary BuildSummary()
+    public ExportSummary BuildSummary(bool includeNetworkAnalysis = true)
     {
+        using (Profiler.Scope("FlushPendingObservations"))
+        {
+            FlushPendingObservations();
+        }
+
         var meta = new SummaryMeta($"tick_{_events.CurrentStep.Value}", _windowObservedTicks, _events.CurrentStep, DateTime.UtcNow);
+        MachineSummaryRow[] machineSummaries;
+        using (Profiler.Scope("BuildMachineSummaries"))
+        {
+            machineSummaries = BuildMachineSummaries().ToArray();
+        }
+
+        VehicleSummaryRow[] vehicleSummaries;
+        using (Profiler.Scope("BuildVehicleSummaries"))
+        {
+            vehicleSummaries = BuildVehicleSummaries().ToArray();
+        }
+        ProductFlowSummaryRow[] productSummaries;
+        using (Profiler.Scope("BuildProductFlowSummaries"))
+        {
+            productSummaries = BuildProductFlowSummaries().ToArray();
+        }
+
+        var dependencyGraph = ProductDependencyGraph.Empty;
+        var impactSimulation = ProductDependencyImpactSimulation.Empty;
+        if (includeNetworkAnalysis)
+        {
+            using (Profiler.Scope("BuildDependencyGraph"))
+            {
+                dependencyGraph = Aggregation.ProductDependencyGraphBuilder.Build(machineSummaries, productSummaries);
+            }
+
+            using (Profiler.Scope("BuildImpactSimulation"))
+            {
+                impactSimulation = Aggregation.ProductImpactSimulator.Build(machineSummaries, productSummaries);
+            }
+        }
+
         return new ExportSummary(
             Meta: meta,
-            Machines: BuildMachineSummaries().ToList(),
-            Vehicles: BuildVehicleSummaries().ToList(),
-            ProductFlow: BuildProductFlowSummaries().ToList()
+            Machines: machineSummaries,
+            Vehicles: vehicleSummaries,
+            ProductFlow: productSummaries,
+            DependencyGraph: dependencyGraph,
+            ImpactSimulation: impactSimulation
             );
+    }
+
+    public IReadOnlyList<MetaInfo> BuildMetadata()
+    {
+        return _tracker.Meta
+            .OrderBy(meta => meta.Id)
+            .ToArray();
     }
 
     private IEnumerable<MachineSummaryRow> BuildMachineSummaries()
     {
-        foreach (var metric in _machines.Values)
+        RefreshSnapshotsIfNeeded();
+        foreach (var metric in _machineSnapshot)
         {
             yield return metric.BuildSummaryRow();
         }
@@ -80,7 +153,8 @@ public sealed class MetricsCollector:IProductFlowMetrics
 
     private IEnumerable<VehicleSummaryRow> BuildVehicleSummaries()
     {
-        foreach (var metric in _vehicles.Values)
+        RefreshSnapshotsIfNeeded();
+        foreach (var metric in _vehicleSnapshot)
         {
             yield return metric.BuildSummaryRow();
         }
@@ -88,42 +162,23 @@ public sealed class MetricsCollector:IProductFlowMetrics
 
     private IEnumerable<ProductFlowSummaryRow> BuildProductFlowSummaries()
     {
-        var storage = BuildCurrentProductStorageIndex();
         foreach (var metric in _products.Values)
         {
-            storage.TryGetValue(metric.ProductId, out var current);
-            yield return metric.BuildSummaryRow(current, _windowObservedTicks);
+            yield return metric.BuildSummaryRow(BuildCurrentProductStorage(metric.ProductId), _windowObservedTicks);
         }
     }
 
-    private Dictionary<ProductId, ProductStorage> BuildCurrentProductStorageIndex()
+    private ProductStorage BuildCurrentProductStorage(ProductId productId)
     {
-        var result = new Dictionary<ProductId, ProductStorage>();
-
-        void Add(ProductId productId, double stored, double capacity)
+        if (!_tracker.TryGetProduct(productId, out var product))
         {
-            result.TryGetValue(productId, out var current);
-            result[productId] = new ProductStorage(current.Stored+stored, current.Capacity+capacity);
+            return default;
         }
 
-        foreach (var storage in _entitiesManager.GetAllEntitiesOfType<Storage>())
-        {
-            var product = storage.StoredProduct.ValueOrNull;
-            if (product is not null)
-            {
-                Add(_tracker.Product(product), storage.CurrentQuantity.Value, storage.UsableCapacity.Value+storage.CurrentQuantity.Value);
-            }
-        }
-        
-        foreach (var machine in _entitiesManager.GetAllEntitiesOfType<Machine>())
-        {
-            if (machine is { LastRecipeInProgress: { ValueOrNull: { } recipe} })
-            {
-                recipe.AllInputs.ForEach(input => Add(_tracker.Product(input.Product),machine.GetInputQuantityFor(input.Product).Value, machine.GetOutputCapacityFor(input.Product).Value));
-                recipe.AllOutputs.ForEach(output => Add(_tracker.Product(output.Product),machine.GetOutputQuantityFor(output.Product).Value,machine.GetOutputCapacityFor(output.Product).Value));
-            }
-        }
-        return result;
+        var stats = _productsManager.GetStatsFor(product);
+        return new ProductStorage(
+            Stored: (double)stats.StoredQuantityTotal.Value,
+            Capacity: (double)stats.StorageCapacity.Value);
     }
 
     public void ResetWindowCounters()
@@ -146,28 +201,96 @@ public sealed class MetricsCollector:IProductFlowMetrics
     }
     
     
-    private MachineMetrics GetMachineMetrics(Machine machine)
+    private void InitializeTrackedEntities()
     {
-        var id = _tracker.Machine(machine);
-        if (!_machines.TryGetValue(id, out var metrics))
+        foreach (var machine in _entitiesManager.GetAllEntitiesOfType<Machine>())
         {
-            metrics = new MachineMetrics(_context, _tracker, this, machine);
-            _machines.Add(id, metrics);
+            RegisterMachine(machine);
         }
 
-        return metrics;
+        foreach (var vehicle in _entitiesManager.GetAllEntitiesOfType<Vehicle>())
+        {
+            RegisterVehicle(vehicle);
+        }
     }
 
-    private VehicleMetrics GetVehicleMetrics(Vehicle vehicle)
+    private void OnEntityAdded(IEntity entity)
     {
-        var id = _tracker.Vehicle(vehicle);
-        if (!_vehicles.TryGetValue(id, out var metrics))
+        if (entity is Machine machine)
         {
-            metrics = VehicleMetrics.Create(_context,_tracker, this, vehicle);
-            _vehicles.Add(id, metrics);
+            RegisterMachine(machine);
+            return;
         }
 
-        return metrics;
+        if (entity is Vehicle vehicle)
+        {
+            RegisterVehicle(vehicle);
+        }
+    }
+
+    private void OnEntityRemoved(IEntity entity)
+    {
+        if (_machines.Remove(entity.Id))
+        {
+            _machineSnapshotDirty = true;
+        }
+
+        if (_vehicles.Remove(entity.Id))
+        {
+            _vehicleSnapshotDirty = true;
+        }
+    }
+
+    private void RegisterMachine(Machine machine)
+    {
+        if (_machines.ContainsKey(machine.Id))
+        {
+            return;
+        }
+
+        _machines[machine.Id] = new MachineMetrics(_context, _tracker, this, machine);
+        _machineSnapshotDirty = true;
+    }
+
+    private void RegisterVehicle(Vehicle vehicle)
+    {
+        if (_vehicles.ContainsKey(vehicle.Id))
+        {
+            return;
+        }
+
+        _vehicles[vehicle.Id] = VehicleMetrics.Create(_context, _tracker, this, vehicle);
+        _vehicleSnapshotDirty = true;
+    }
+
+    private void RefreshSnapshotsIfNeeded()
+    {
+        if (_machineSnapshotDirty)
+        {
+            _machineSnapshot = _machines.Values.ToArray();
+            _machineSnapshotDirty = false;
+        }
+
+        if (_vehicleSnapshotDirty)
+        {
+            _vehicleSnapshot = _vehicles.Values.ToArray();
+            _vehicleSnapshotDirty = false;
+        }
+    }
+
+    private void FlushPendingObservations()
+    {
+        RefreshSnapshotsIfNeeded();
+        var currentStep = _events.CurrentStep;
+        foreach (var metrics in _machineSnapshot)
+        {
+            metrics.Flush(currentStep);
+        }
+
+        foreach (var metrics in _vehicleSnapshot)
+        {
+            metrics.Flush(currentStep);
+        }
     }
 
     private ProductFlowMetrics GetProductFlow(ProductId id)
@@ -214,5 +337,11 @@ public sealed class MetricsCollector:IProductFlowMetrics
     public void AddLost(ProductId productId, double amount)
     {
         GetProductFlow(productId).AddLost(amount);
+    }
+
+    public void Dispose()
+    {
+        _entitiesManager.EntityAdded.Remove<MetricsCollector>(this, OnEntityAdded);
+        _entitiesManager.EntityRemoved.Remove<MetricsCollector>(this, OnEntityRemoved);
     }
 }

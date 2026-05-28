@@ -64,6 +64,8 @@
     <ItemGroup>
         <Compile Include="Aggregation\RollingSummaryAggregator.cs" />
         <Compile Include="Aggregation\SummaryCombiner.cs" />
+        <Compile Include="Aggregation\ProductDependencyGraphBuilder.cs" />
+        <Compile Include="Aggregation\ProductImpactSimulator.cs" />
         <Compile Include="Collecting\BaseMetrics.cs" />
         <Compile Include="Collecting\CargoMetrics.cs" />
         <Compile Include="Collecting\MachineMetrics.cs" />
@@ -74,20 +76,24 @@
         <Compile Include="Contracts\Dtos\MetaInfo.cs" />
         <Compile Include="Contracts\Dtos\ExportSummary.cs" />
         <Compile Include="Contracts\Dtos\LiveSummary.cs" />
+        <Compile Include="Contracts\Dtos\MachinePotentialScenario.cs" />
         <Compile Include="Contracts\Dtos\MachineSummaryRow.cs" />
         <Compile Include="Contracts\Dtos\ProductBufferSummary.cs" />
+        <Compile Include="Contracts\Dtos\ProductDependencyGraph.cs" />
+        <Compile Include="Contracts\Dtos\ProductDependencyImpactSimulation.cs" />
         <Compile Include="Contracts\Dtos\ProductFlowSummary.cs" />
         <Compile Include="Contracts\Dtos\ProductFlowSummaryRow.cs" />
         <Compile Include="Contracts\Dtos\ProductStorage.cs" />
         <Compile Include="Contracts\Dtos\VehicleSummaryRow.cs" />
         <Compile Include="Contracts\Enums\ObservedState.cs" />
+        <Compile Include="Contracts\Enums\VehicleBlockerKind.cs" />
         <Compile Include="Contracts\Ids\EntityId.cs" />
         <Compile Include="Contracts\Ids\ProductId.cs" />
         <Compile Include="Contracts\Ids\RecipeId.cs" />
         <Compile Include="Mapping\EntityTracker.cs" />
         <Compile Include="Mapping\IdTracker.cs" />
         <Compile Include="Runtime\ExportScheduler.cs" />
-        <Compile Include="Runtime\MetricProfiler.cs" />
+        <Compile Include="Runtime\Profiler.cs" />
         <Compile Include="Runtime\ModRuntime.cs" />
         <Compile Include="Runtime\ObjectInspector.cs" />
         <Compile Include="TelemetryMod.cs" />

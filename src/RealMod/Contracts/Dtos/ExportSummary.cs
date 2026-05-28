@@ -30,4 +30,6 @@ public sealed record ExportSummary(
     SummaryMeta Meta,
     IReadOnlyList<MachineSummaryRow> Machines,
     IReadOnlyList<VehicleSummaryRow> Vehicles,
-    IReadOnlyList<ProductFlowSummaryRow> ProductFlow);
+    IReadOnlyList<ProductFlowSummaryRow> ProductFlow,
+    ProductDependencyGraph DependencyGraph,
+    ProductDependencyImpactSimulation ImpactSimulation);

@@ -1,3 +1,4 @@
+using System;
 using CoiTelemetry.RealMod.Contracts.Dtos;
 using CoiTelemetry.RealMod.Contracts.Ids;
 using Mafi;
@@ -104,7 +105,9 @@ public class ProductFlowMetrics
     public ProductFlowSummaryRow BuildSummaryRow(ProductStorage storage, int observedTicks)
     {
         var windowSeconds = SimStep.SECONDS_PER_STEP * observedTicks;
-
+        var fillPercent = storage.Capacity <= 0
+            ? 0
+            : storage.Stored * 100.0 / storage.Capacity;
         var netPerMinute = MetricMath.PerMinute(NetAmount, windowSeconds);
         return new ProductFlowSummaryRow(
             ProductId: _productId.Value,
@@ -123,7 +126,7 @@ public class ProductFlowMetrics
             NetPerMinute: netPerMinute,
             LatestStored: storage.Stored,
             LatestCapacity: storage.Capacity,
-            LatestFillPercent: 100 * storage.Stored / storage.Capacity,
+            LatestFillPercent: fillPercent,
             MinStored: storage.Stored,
             MaxStored: storage.Stored,
             AvgStored: storage.Stored,

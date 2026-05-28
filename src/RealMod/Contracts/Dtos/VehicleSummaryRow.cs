@@ -12,6 +12,8 @@ public sealed record VehicleSummaryRow(
     string? AssignedTo,
     IReadOnlyDictionary<ObservedState, double> UptimePercent,
     IReadOnlyDictionary<ObservedState, int> UptimeTicks,
+    IReadOnlyDictionary<VehicleBlockerKind, double> BlockerPercent,
+    IReadOnlyDictionary<VehicleBlockerKind, int> BlockerTicks,
     
     double Maintenance,
     double Power,
@@ -27,6 +29,13 @@ public sealed record VehicleSummaryRow(
     IReadOnlyList<ProductFlowSummary> Consumed,
 
     IReadOnlyDictionary<string,int> Jobs,
+    string? CurrentJob,
+    string? CurrentJobInfo,
+    string? CurrentGoal,
+    string PathFindingState,
+    string DrivingState,
 
+    [property:JsonConverter(typeof(StringEnumConverter))]
+    VehicleBlockerKind PrimaryDetailedBlocker,
     [property:JsonConverter(typeof(StringEnumConverter))]
     ObservedState PrimaryBlocker);
