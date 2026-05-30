@@ -26,10 +26,17 @@ public sealed record SummaryMeta(
     SimStep Step,
     DateTime CreatedAtUtc
     );
+
 public sealed record ExportSummary(
+    IReadOnlyList<MetaInfo>? Metadata,
     SummaryMeta Meta,
     IReadOnlyList<MachineSummaryRow> Machines,
     IReadOnlyList<VehicleSummaryRow> Vehicles,
     IReadOnlyList<ProductFlowSummaryRow> ProductFlow,
     ProductDependencyGraph DependencyGraph,
-    ProductDependencyImpactSimulation ImpactSimulation);
+    ProductDependencyImpactSimulation ImpactSimulation)
+{
+    public ExportSummary WithoutMetadata() =>
+        new(null, Meta, Machines, Vehicles, ProductFlow, DependencyGraph, ImpactSimulation);
+
+}

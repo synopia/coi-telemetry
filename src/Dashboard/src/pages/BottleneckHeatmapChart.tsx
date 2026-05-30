@@ -106,7 +106,7 @@ const percentFromRatio = (ratio: number|null|undefined) => {
 }
 export function toBottleneckRows(summary:LiveSummary, window:"10s"|"1m"|"5m"|"10m"){
   const w = summary[`window${window}`]
-  const machineRows: BottleneckRow[] = (w.machines).map((m) => ({
+  const machineRows: BottleneckRow[] = w.machines.map((m) => ({
     id: m.machineId,
     label: m.machineId,
     kind: 'machine',
@@ -116,16 +116,21 @@ export function toBottleneckRows(summary:LiveSummary, window:"10s"|"1m"|"5m"|"10
     notEnoughInputPercent: percentFromRatio(m.uptimePercent.notEnoughInput),
     outputFullPercent: percentFromRatio(m.uptimePercent.outputFull),
 
-    maintenancePressure:pressureFromAvailableRatio(m.maintenance),
-    powerPressure: pressureFromAvailableRatio(m.power),
-    computingPressure:pressureFromAvailableRatio(m.computing),
-    workersPressure:pressureFromAvailableRatio(m.workers),
+    maintenancePressure: percentFromRatio(m.pressure.maintenance),
+    powerPressure: percentFromRatio(m.pressure.power),
+    computingPressure: percentFromRatio(m.pressure.computing),
+    workersPressure: percentFromRatio(m.pressure.workers),
 
-    notEnoughWorkersStopPercent:percentFromRatio(m.uptimePercent.notEnoughWorkers),
+    notEnoughWorkersStopPercent: percentFromRatio(
+      m.uptimePercent.notEnoughWorkers
+    ),
     notEnoughPowerStopPercent: percentFromRatio(m.uptimePercent.notEnoughPower),
-    notEnoughComputingStopPercent: percentFromRatio(m.uptimePercent.notEnoughComputing),
-    notEnoughMaintenanceStopPercent: percentFromRatio(m.uptimePercent.notEnoughMaintenance),
-
+    notEnoughComputingStopPercent: percentFromRatio(
+      m.uptimePercent.notEnoughComputing
+    ),
+    notEnoughMaintenanceStopPercent: percentFromRatio(
+      m.uptimePercent.notEnoughMaintenance
+    ),
   }))
   const vehicleRows: BottleneckRow[] = w.vehicles.map((v) => ({
     id: v.vehicleId,
@@ -136,15 +141,21 @@ export function toBottleneckRows(summary:LiveSummary, window:"10s"|"1m"|"5m"|"10
     notEnoughInputPercent: percentFromRatio(v.uptimePercent.notEnoughInput),
     outputFullPercent: percentFromRatio(v.uptimePercent.outputFull),
 
-    maintenancePressure:pressureFromAvailableRatio( v.maintenance),
-    powerPressure: pressureFromAvailableRatio(v.power),
-    computingPressure:pressureFromAvailableRatio( v.computing),
-    workersPressure: pressureFromAvailableRatio(v.workers),
+    maintenancePressure: percentFromRatio(v.pressure.maintenance),
+    powerPressure: percentFromRatio(v.pressure.power),
+    computingPressure: percentFromRatio(v.pressure.computing),
+    workersPressure: percentFromRatio(v.pressure.workers),
 
-    notEnoughWorkersStopPercent: percentFromRatio(v.uptimePercent.notEnoughWorkers),
+    notEnoughWorkersStopPercent: percentFromRatio(
+      v.uptimePercent.notEnoughWorkers
+    ),
     notEnoughPowerStopPercent: percentFromRatio(v.uptimePercent.notEnoughPower),
-    notEnoughComputingStopPercent: percentFromRatio(v.uptimePercent.notEnoughComputing),
-    notEnoughMaintenanceStopPercent: percentFromRatio(v.uptimePercent.notEnoughMaintenance),
+    notEnoughComputingStopPercent: percentFromRatio(
+      v.uptimePercent.notEnoughComputing
+    ),
+    notEnoughMaintenanceStopPercent: percentFromRatio(
+      v.uptimePercent.notEnoughMaintenance
+    ),
   }))
 
   return [...machineRows, ...vehicleRows]

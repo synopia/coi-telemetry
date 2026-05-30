@@ -5,6 +5,7 @@ using Newtonsoft.Json.Converters;
 
 namespace CoiTelemetry.RealMod.Contracts.Dtos;
 
+
 public sealed record MachineSummaryRow(
     string MachineId,
     string? RecipeId,
@@ -13,10 +14,8 @@ public sealed record MachineSummaryRow(
     IReadOnlyDictionary<ObservedState, double> UptimePercent,
     IReadOnlyDictionary<ObservedState, int> UptimeTicks,
 
-    double Maintenance,
-    double Power,
-    double Computing,
-    double Workers,
+    int Electricity,
+    PressureSummary Pressure,
 
     IReadOnlyList<ProductFlowSummary> Inputs,
     IReadOnlyList<ProductFlowSummary> Outputs,
@@ -27,4 +26,4 @@ public sealed record MachineSummaryRow(
 
     [property:JsonConverter(typeof(StringEnumConverter))]
     ObservedState PrimaryBlocker
-);
+) : BaseSummaryRow(Electricity, Pressure);

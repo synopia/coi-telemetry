@@ -8,14 +8,8 @@ using CoiTelemetry.RealMod.Contracts.Ids;
 using CoiTelemetry.RealMod.Mapping;
 using CoiTelemetry.RealMod.Runtime;
 using Mafi;
-using Mafi.Core.Entities;
-using Mafi.Core.Entities.Dynamic;
-using Mafi.Core.Factory.ComputingPower;
-using Mafi.Core.Factory.ElectricPower;
 using Mafi.Core.Factory.Machines;
 using Mafi.Core.Factory.Recipes;
-using Mafi.Core.Maintenance;
-using Mafi.Core.Population;
 using Mafi.Core.Products;
 
 namespace CoiTelemetry.RealMod.Collecting;
@@ -68,10 +62,8 @@ public class MachineMetrics : BaseMetrics
             ObservedTicks: ObservedTicks,
             UptimePercent: BuildStatePercentages(),
             UptimeTicks: BuildStateCounters(),
-            Maintenance: Maintenance,
-            Power: Power,
-            Computing: Computing,
-            Workers: Workers,
+            Electricity: Electricity,
+            Pressure:new PressureSummary(Maintenance, Power, Computing, Workers),
             Inputs: BuildConsumeFlow(),
             Outputs: BuildProduceFlow(),
             InputBuffers: inputBuffers,
@@ -134,7 +126,7 @@ public class MachineMetrics : BaseMetrics
 
     private void RecordRecipeCycle(RecipeProto recipe)
     {
-        using (Profiler.Scope("RecordRecipeCycle"))
+        using (SimProfiler.Scope("RecordRecipeCycle"))
         {
             var utilization = _machine.Utilization;
 
@@ -187,10 +179,10 @@ public class MachineMetrics : BaseMetrics
 
         var factors = new Dictionary<string, double>
         {
-            ["maintenance"] = GetResourceFactor(_machine is IMaintainedEntity, Maintenance),
-            ["power"] = GetResourceFactor(_machine is IEntityWithFuelTank or IElectricityConsumingEntity, Power),
-            ["computing"] = GetResourceFactor(_machine is IComputingConsumingEntity, Computing),
-            ["workers"] = GetResourceFactor(_machine is IEntityWithWorkers, Workers),
+            ["maintenance"] = GetResourceFactor(Maintenance),
+            ["power"] = GetResourceFactor(Power),
+            ["computing"] = GetResourceFactor( Computing),
+            ["workers"] = GetResourceFactor( Workers),
         };
 
         var scenarios = new List<MachinePotentialScenario>();
@@ -282,11 +274,11 @@ public class MachineMetrics : BaseMetrics
             PerMinute: perMinute);
     }
 
-    private static double GetResourceFactor(bool isApplicable, double value)
+    private static double GetResourceFactor(double? value)
     {
-        return !isApplicable
+        return value is null
             ? 1
-            : Math.Max(0, Math.Min(1, value));
+            : Math.Max(0, Math.Min(1, (double)value));
     }
 
     private static double ComputeCapacityFactor(IReadOnlyDictionary<string, double> factors, string? ignoredFactor = null)
@@ -305,11 +297,6 @@ public class MachineMetrics : BaseMetrics
         return factor;
     }
 
-    public override void ResetWindow()
-    {
-        base.ResetWindow();
-    }
-    
     private ObservedState FindState()
     {
         switch (_machine.CurrentState)

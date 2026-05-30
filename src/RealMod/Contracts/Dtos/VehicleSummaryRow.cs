@@ -15,10 +15,8 @@ public sealed record VehicleSummaryRow(
     IReadOnlyDictionary<VehicleBlockerKind, double> BlockerPercent,
     IReadOnlyDictionary<VehicleBlockerKind, int> BlockerTicks,
     
-    double Maintenance,
-    double Power,
-    double Computing,
-    double Workers,
+    int Electricity,
+    PressureSummary Pressure,
 
     double EmptyTravelDistance,
     double LoadedTravelDistance,
@@ -38,4 +36,4 @@ public sealed record VehicleSummaryRow(
     [property:JsonConverter(typeof(StringEnumConverter))]
     VehicleBlockerKind PrimaryDetailedBlocker,
     [property:JsonConverter(typeof(StringEnumConverter))]
-    ObservedState PrimaryBlocker);
+    ObservedState PrimaryBlocker) : BaseSummaryRow(Electricity, Pressure);

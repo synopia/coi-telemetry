@@ -62,6 +62,7 @@
         </Reference>
     </ItemGroup>
     <ItemGroup>
+        <Compile Include="Aggregation\AggregationWorker.cs" />
         <Compile Include="Aggregation\RollingSummaryAggregator.cs" />
         <Compile Include="Aggregation\SummaryCombiner.cs" />
         <Compile Include="Aggregation\ProductDependencyGraphBuilder.cs" />
@@ -73,6 +74,7 @@
         <Compile Include="Collecting\MetricsCollector.cs" />
         <Compile Include="Collecting\ProductFlowMetrics.cs" />
         <Compile Include="Collecting\VehicleMetrics.cs" />
+        <Compile Include="Contracts\Dtos\BaseSummaryRow.cs" />
         <Compile Include="Contracts\Dtos\MetaInfo.cs" />
         <Compile Include="Contracts\Dtos\ExportSummary.cs" />
         <Compile Include="Contracts\Dtos\LiveSummary.cs" />
@@ -93,7 +95,7 @@
         <Compile Include="Mapping\EntityTracker.cs" />
         <Compile Include="Mapping\IdTracker.cs" />
         <Compile Include="Runtime\ExportScheduler.cs" />
-        <Compile Include="Runtime\Profiler.cs" />
+        <Compile Include="Runtime\SimProfiler.cs" />
         <Compile Include="Runtime\ModRuntime.cs" />
         <Compile Include="Runtime\ObjectInspector.cs" />
         <Compile Include="TelemetryMod.cs" />

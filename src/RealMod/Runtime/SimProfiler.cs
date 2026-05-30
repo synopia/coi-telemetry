@@ -268,9 +268,9 @@ public sealed class ProfilerNode
     }
 }
 
-public static class Profiler
+public static class SimProfiler
 {
-    private static readonly HierarchicalProfiler Instance = new("COI.Mod");
+    private static readonly HierarchicalProfiler Instance = new("COI.Mod.SimTick");
 
     public static void Reset() => Instance.Reset();
 

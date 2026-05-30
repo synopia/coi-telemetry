@@ -31,6 +31,7 @@ public static class SummaryCombiner
             : (Graph: ProductDependencyGraph.Empty, Simulation: ProductDependencyImpactSimulation.Empty);
 
         return new ExportSummary(
+            Metadata: null,
             Meta: meta,
             Machines: machines,
             Vehicles: vehicles,
@@ -45,13 +46,13 @@ public static class SummaryCombiner
         IReadOnlyList<ProductFlowSummaryRow> productFlow)
     {
         ProductDependencyGraph graph;
-        using (Profiler.Scope("BuildDependencyGraph"))
+        using (SimProfiler.Scope("BuildDependencyGraph"))
         {
             graph = ProductDependencyGraphBuilder.Build(machines, productFlow);
         }
 
         ProductDependencyImpactSimulation simulation;
-        using (Profiler.Scope("BuildImpactSimulation"))
+        using (SimProfiler.Scope("BuildImpactSimulation"))
         {
             simulation = ProductImpactSimulator.Build(machines, productFlow);
         }
@@ -320,10 +321,8 @@ public static class SummaryCombiner
         public string MachineId { get; }
         public string? RecipeId { get; private set; }
         public int ObservedTicks { get; private set; }
-        public double Maintenance { get; private set; }
-        public double Power { get; private set; }
-        public double Computing { get; private set; }
-        public double Workers { get; private set; }
+        public int Electricity { get; private set; }
+        public PressureSummary Pressure { get; private set; }
         public IReadOnlyList<ProductBufferSummary> InputBuffers { get; private set; } = Array.Empty<ProductBufferSummary>();
         public IReadOnlyList<ProductBufferSummary> OutputBuffers { get; private set; } = Array.Empty<ProductBufferSummary>();
         public IReadOnlyList<MachinePotentialScenario> PotentialScenarios { get; private set; } = Array.Empty<MachinePotentialScenario>();
@@ -332,10 +331,8 @@ public static class SummaryCombiner
         {
             ObservedTicks += summaryObservedTicks;
             RecipeId = row.RecipeId;
-            Maintenance = row.Maintenance;
-            Power = row.Power;
-            Computing = row.Computing;
-            Workers = row.Workers;
+            Electricity = row.Electricity;
+            Pressure = row.Pressure;
             InputBuffers = row.InputBuffers;
             OutputBuffers = row.OutputBuffers;
             PotentialScenarios = row.PotentialScenarios;
@@ -354,10 +351,8 @@ public static class SummaryCombiner
                 ObservedTicks: ObservedTicks,
                 UptimePercent: MetricMath.Percent(_uptimeTicks, ObservedTicks),
                 UptimeTicks: _uptimeTicks,
-                Maintenance: Maintenance,
-                Power: Power,
-                Computing: Computing,
-                Workers: Workers,
+                Electricity: Electricity,
+                Pressure:Pressure,
                 Inputs: BuildFlowSummaries(_inputs, totalSeconds),
                 Outputs: BuildFlowSummaries(_outputs, totalSeconds),
                 InputBuffers: InputBuffers,
@@ -384,10 +379,8 @@ public static class SummaryCombiner
         public string VehicleId { get; }
         public int ObservedTicks { get; private set; }
         public string? AssignedTo { get; private set; }
-        public double Maintenance { get; private set; }
-        public double Power { get; private set; }
-        public double Computing { get; private set; }
-        public double Workers { get; private set; }
+        public int Electricity { get; private set; }
+        public PressureSummary Pressure { get; private set; }
         public double EmptyTravelDistance { get; private set; }
         public double LoadedTravelDistance { get; private set; }
         public int DeliveriesCompleted { get; private set; }
@@ -401,10 +394,8 @@ public static class SummaryCombiner
         {
             ObservedTicks += summaryObservedTicks;
             AssignedTo = row.AssignedTo;
-            Maintenance = row.Maintenance;
-            Power = row.Power;
-            Computing = row.Computing;
-            Workers = row.Workers;
+            Electricity = row.Electricity;
+            Pressure = row.Pressure;
             EmptyTravelDistance += row.EmptyTravelDistance;
             LoadedTravelDistance += row.LoadedTravelDistance;
             DeliveriesCompleted += row.DeliveriesCompleted;
@@ -435,10 +426,8 @@ public static class SummaryCombiner
                 BlockerTicks: _blockerTicks,
                 DeliveriesCompleted: DeliveriesCompleted,
                 Delivered: BuildFlowSummaries(_delivered, totalSeconds),
-                Maintenance: Maintenance,
-                Power: Power,
-                Computing: Computing,
-                Workers: Workers,
+                Electricity: Electricity,
+                Pressure: Pressure,
                 Produced: BuildFlowSummaries(_produced, totalSeconds),
                 Consumed: BuildFlowSummaries(_consumed, totalSeconds),
                 Jobs: _jobs,

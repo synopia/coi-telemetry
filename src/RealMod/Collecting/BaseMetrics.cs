@@ -14,7 +14,6 @@ using Mafi.Core.Factory.ComputingPower;
 using Mafi.Core.Factory.ElectricPower;
 using Mafi.Core.Maintenance;
 using Mafi.Core.Population;
-using Mafi.Core.Products;
 using Mafi.Base;
 
 namespace CoiTelemetry.RealMod.Collecting;
@@ -24,7 +23,7 @@ public abstract class BaseMetrics
     protected readonly IModContext Context;
     protected readonly EntityTracker Tracker;
     private readonly IProductFlowMetrics _flowMetrics;
-    private readonly Entity Entity;
+    private readonly Entity _entity;
     private bool _hasObservedStep;
     private int _lastObservedStepValue;
     private int _nextObservationStepValue;
@@ -33,11 +32,12 @@ public abstract class BaseMetrics
     protected double ObservedSeconds => ObservedTicks * SimStep.SECONDS_PER_STEP;
     protected int SampleTicks { get; private set; } = 1;
     private readonly Dictionary<ObservedState, int> _stateCounters = new();
-    protected double Maintenance { get; set; }
-    protected double Power { get; set; }
-    protected double Computing { get; set; }
-    protected double Workers { get; set; }
-   
+    protected double? Maintenance { get; set; }
+    protected double? Power { get; set; }
+    protected double? Computing { get; set; }
+    protected double? Workers { get; set; }
+    protected int Electricity { get; set; }
+    
     protected CargoMetrics Usage { get; } = new();
     private readonly Dictionary<ProductId, double> _producedByProduct = new();
     private readonly Dictionary<ProductId, double> _consumedByProduct = new();
@@ -47,7 +47,7 @@ public abstract class BaseMetrics
         Context = context;
         _flowMetrics = flowMetrics;
         Tracker = tracker;
-        Entity = entity;
+        _entity = entity;
     }
 
     public bool ShouldUpdate(SimStep currentStep)
@@ -66,7 +66,7 @@ public abstract class BaseMetrics
 
     protected virtual void AfterObserveState()
     {
-        using (Profiler.Scope("SwapBuffers"))
+        using (SimProfiler.Scope("SwapBuffers"))
         {
             Usage.SwapBuffers();
         }
@@ -75,7 +75,7 @@ public abstract class BaseMetrics
         {
             if (kv.Value < 0)
             {
-                using (Profiler.Scope("AddConsumed"))
+                using (SimProfiler.Scope("AddConsumed"))
                 {
                     AddConsumed(kv.Key, -kv.Value);
                 }
@@ -85,7 +85,7 @@ public abstract class BaseMetrics
 
     public void Update(SimStep currentStep)
     {
-        using (Profiler.Scope("ObserveAt"))
+        using (SimProfiler.Scope("ObserveAt"))
         {
             ObserveAt(currentStep);
         }
@@ -110,35 +110,45 @@ public abstract class BaseMetrics
         _lastObservedStepValue = currentStep.Value;
         ObservedTicks += SampleTicks;
 
-        if (Entity is IMaintainedEntity maintainedEntity)
+        if (!_entity.IsEnabled)
         {
-            using (Profiler.Scope("ObserveMaintenance"))
+            Power = null;
+            Computing = null;
+            Maintenance = null;
+            Workers = null;
+            Electricity = 0;
+            return; 
+        }
+        if (_entity is IMaintainedEntity maintainedEntity)
+        {
+            using (SimProfiler.Scope("ObserveMaintenance"))
             {
                 var maintenanceStatus = maintainedEntity.Maintenance.Status;
                 var maintenanceMax = maintenanceStatus.MaintenancePointsMax.Value.ToDouble();
                 Maintenance = maintenanceMax <= 0
-                    ? 1
-                    : Math.Min(1, maintenanceStatus.MaintenancePointsCurrent.Value.ToDouble() / maintenanceMax);
+                    ? null
+                    : 1-Math.Min(1, maintenanceStatus.MaintenancePointsCurrent.Value.ToDouble() / maintenanceMax);
                 if (!maintainedEntity.Maintenance.CanWork())
                 {
                     TrackState(ObservedState.NotEnoughMaintenance);
                 }
-
-                Usage.Set(Tracker.Ids.Product(Ids.Products.MaintenanceT1), Maintenance);
+                
+                var costs = maintainedEntity.MaintenanceCosts;
+                AddConsumed(Tracker.Ids.Product(costs.Product.Id), costs.MaintenancePerMonth.Value.ToDouble()/Duration.OneMonth.Ticks);
             }
         }
 
-        if (Entity is IEntityWithFuelTank fuelTankEntity)
+        if (_entity is IEntityWithFuelTank fuelTankEntity)
         {
-            using (Profiler.Scope("ObserveFuel"))
+            using (SimProfiler.Scope("ObserveFuel"))
             {
                 var fuelTank = fuelTankEntity.FuelTank.ValueOrNull;
                 if (fuelTank is not null)
                 {
                     var maxDurationTicks = fuelTank.Proto.OneQuantityDuration.Ticks * fuelTank.Proto.Capacity.Value;
                     Power = maxDurationTicks <= 0
-                        ? 1
-                        : (double)fuelTank.RemainingDuration.Ticks / maxDurationTicks;
+                        ? 0
+                        : 1-(double)fuelTank.RemainingDuration.Ticks / maxDurationTicks;
                     if (((FuelTank)fuelTank).IsEmpty)
                     {
                         TrackState(ObservedState.NotEnoughPower);
@@ -150,70 +160,72 @@ public abstract class BaseMetrics
             }
         }
         
-        if (Entity is IElectricityConsumingEntity electricityConsumingEntity)
+        if (_entity is IElectricityConsumingEntity electricityConsumingEntity)
         {
-            using (Profiler.Scope("ObservePower"))
+            using (SimProfiler.Scope("ObservePower"))
             {
-
-
                 var power = (ElectricityConsumer?)electricityConsumingEntity.ElectricityConsumer.ValueOrNull;
                 if (power is not null)
                 {
                     if (!power.NotEnoughPower)
                     {
-                        Power = 1;
-                        AddConsumed(Tracker.Ids.Product(Ids.Products.Electricity),
-                            power.PowerRequired.Value * SampleTicks);
+                        Power = 0;
+                        Electricity = power.PowerRequired.Value;
                     }
                     else
                     {
-                        Power = 0;
+                        Power = 1;
+                        Electricity = 0;
                         TrackState(ObservedState.NotEnoughPower);
                     }
-
                 }
             }
         }
 
-        if (Entity is IComputingConsumingEntity computingConsumingEntity)
+        if (_entity is IComputingConsumingEntity computingConsumingEntity)
         {
-            using (Profiler.Scope("ObserveComputing"))
+            using (SimProfiler.Scope("ObserveComputing"))
             {
                 var computing = computingConsumingEntity.ComputingConsumer.ValueOrNull;
                 Computing = computing is null
-                    ? 0
+                    ? null
                     : computing.ComputingRequired.Value <= 0
-                        ? 1
-                        : Math.Min(1, (double)computing.ComputingCharged.Value / computing.ComputingRequired.Value);
+                        ? null
+                        : 1-Math.Min(1, (double)computing.ComputingCharged.Value / computing.ComputingRequired.Value);
                 if (computing?.NotEnoughComputing == true)
                 {
                     TrackState(ObservedState.NotEnoughComputing);
                 }
 
-                Usage.Set(Tracker.Ids.Product(Ids.Products.Computing), Computing);
+                if (Computing is not null)
+                {
+                    Usage.Set(Tracker.Ids.Product(Ids.Products.Computing), (double)Computing);
+                }
             }
         }
 
-        if (Entity is IEntityWithWorkers workersEntity)
+        if (_entity is IEntityWithWorkers workersEntity)
         {
-            using (Profiler.Scope("ObserveWorkers"))
+            using (SimProfiler.Scope("ObserveWorkers"))
             {
+                
                 Workers = workersEntity.WorkersNeeded <= 0
-                    ? 1
-                    : (double)workersEntity.WorkersAssigned() / workersEntity.WorkersNeeded;
-                if (Workers < 1)
+                    ? null
+                    : 1-(double)workersEntity.WorkersAssigned() / workersEntity.WorkersNeeded;
+                
+                if (Workers > 0)
                 {
                     TrackState(ObservedState.NotEnoughWorkers);
                 }
             }
         }
 
-        using (Profiler.Scope("ObserveState"))
+        using (SimProfiler.Scope("ObserveState"))
         {
             ObserveState();
         }
 
-        using (Profiler.Scope("AfterObserveState"))
+        using (SimProfiler.Scope("AfterObserveState"))
         {
             AfterObserveState();
         }
@@ -225,10 +237,11 @@ public abstract class BaseMetrics
     public virtual void ResetWindow()
     {
         ObservedTicks = 0;
-        Maintenance = 0;
-        Power = 0;
-        Computing = 0;
-        Workers = 0;
+        Maintenance = null;
+        Power = null;
+        Computing = null;
+        Workers = null;
+        Electricity = 0;
         _producedByProduct.Clear();
         _consumedByProduct.Clear();
 

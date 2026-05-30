@@ -40,20 +40,20 @@ public sealed class MetricsCollector : IProductFlowMetrics, IDisposable
         _tracker = new EntityTracker(new IdTracker());
 
         InitializeTrackedEntities();
-        _entitiesManager.EntityAdded.Add<MetricsCollector>(this, OnEntityAdded);
-        _entitiesManager.EntityRemoved.Add<MetricsCollector>(this, OnEntityRemoved);
+        _entitiesManager.EntityAdded.AddNonSaveable(this, OnEntityAdded);
+        _entitiesManager.EntityRemoved.AddNonSaveable(this, OnEntityRemoved);
     }
     
     public void ObserveSimulationTick()
     {
         _windowObservedTicks++;
 
-        using (Profiler.Scope("ObserveMachines"))
+        using (SimProfiler.Scope("ObserveMachines"))
         {
             ObserveMachines();
         }
 
-        using (Profiler.Scope("ObserveVehicles"))
+        using (SimProfiler.Scope("ObserveVehicles"))
         {
             ObserveVehicles();
         }
@@ -85,27 +85,27 @@ public sealed class MetricsCollector : IProductFlowMetrics, IDisposable
         }
     }
 
-    public ExportSummary BuildSummary(bool includeNetworkAnalysis = true)
+    public ExportSummary BuildSummary(bool includeNetworkAnalysis = true, bool includeMetadata = false)
     {
-        using (Profiler.Scope("FlushPendingObservations"))
+        using (SimProfiler.Scope("FlushPendingObservations"))
         {
             FlushPendingObservations();
         }
 
         var meta = new SummaryMeta($"tick_{_events.CurrentStep.Value}", _windowObservedTicks, _events.CurrentStep, DateTime.UtcNow);
         MachineSummaryRow[] machineSummaries;
-        using (Profiler.Scope("BuildMachineSummaries"))
+        using (SimProfiler.Scope("BuildMachineSummaries"))
         {
             machineSummaries = BuildMachineSummaries().ToArray();
         }
 
         VehicleSummaryRow[] vehicleSummaries;
-        using (Profiler.Scope("BuildVehicleSummaries"))
+        using (SimProfiler.Scope("BuildVehicleSummaries"))
         {
             vehicleSummaries = BuildVehicleSummaries().ToArray();
         }
         ProductFlowSummaryRow[] productSummaries;
-        using (Profiler.Scope("BuildProductFlowSummaries"))
+        using (SimProfiler.Scope("BuildProductFlowSummaries"))
         {
             productSummaries = BuildProductFlowSummaries().ToArray();
         }
@@ -114,18 +114,19 @@ public sealed class MetricsCollector : IProductFlowMetrics, IDisposable
         var impactSimulation = ProductDependencyImpactSimulation.Empty;
         if (includeNetworkAnalysis)
         {
-            using (Profiler.Scope("BuildDependencyGraph"))
+            using (SimProfiler.Scope("BuildDependencyGraph"))
             {
                 dependencyGraph = Aggregation.ProductDependencyGraphBuilder.Build(machineSummaries, productSummaries);
             }
 
-            using (Profiler.Scope("BuildImpactSimulation"))
+            using (SimProfiler.Scope("BuildImpactSimulation"))
             {
                 impactSimulation = Aggregation.ProductImpactSimulator.Build(machineSummaries, productSummaries);
             }
         }
 
         return new ExportSummary(
+            Metadata:includeMetadata ? BuildMetadata() : Array.Empty<MetaInfo>(),
             Meta: meta,
             Machines: machineSummaries,
             Vehicles: vehicleSummaries,
@@ -341,7 +342,7 @@ public sealed class MetricsCollector : IProductFlowMetrics, IDisposable
 
     public void Dispose()
     {
-        _entitiesManager.EntityAdded.Remove<MetricsCollector>(this, OnEntityAdded);
-        _entitiesManager.EntityRemoved.Remove<MetricsCollector>(this, OnEntityRemoved);
+        _entitiesManager.EntityAdded.RemoveNonSaveable(this, OnEntityAdded);
+        _entitiesManager.EntityRemoved.RemoveNonSaveable(this, OnEntityRemoved);
     }
 }

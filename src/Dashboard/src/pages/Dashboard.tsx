@@ -87,37 +87,6 @@ export default function Dashboard() {
         </p>
       </div>
 
-      {/* Stats Grid */}
-      {/*
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-6">
-        <StatCard
-          title="Total Revenue"
-          value={formatCurrency(45231.89)}
-          change={20.1}
-          icon={DollarSign}
-        />
-        <StatCard
-          title="Active Users"
-          value="2,350"
-          change={15.3}
-          icon={Users}
-        />
-        <StatCard
-          title="Total Orders"
-          value="1,234"
-          change={-4.2}
-          icon={ShoppingCart}
-        />
-        <StatCard
-          title="Conversion Rate"
-          value="3.42%"
-          change={8.7}
-          icon={TrendingUp}
-        />
-      </div>
-*/}
-
-      {/* Charts */}
       <div className="grid grid-cols-1 lg:grid-cols-1 gap-6 mb-6">
         {summary && (
           <BottleneckHeatmapChart rows={toBottleneckRows(summary, '1m')} />

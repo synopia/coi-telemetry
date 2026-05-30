@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using System.Linq;
 using CoiTelemetry.RealMod.Contracts.Dtos;
 using CoiTelemetry.RealMod.Contracts.Ids;
 using Mafi.Core.Buildings.FuelStations;
@@ -8,6 +9,7 @@ using Mafi.Core.Entities.Dynamic;
 using Mafi.Core.Factory.Machines;
 using Mafi.Core.Factory.Recipes;
 using Mafi.Core.Products;
+using Mafi.Core.Prototypes;
 
 namespace CoiTelemetry.RealMod.Mapping;
 
@@ -15,9 +17,28 @@ namespace CoiTelemetry.RealMod.Mapping;
 public sealed class EntityTracker(IdTracker ids)
 {
     private readonly Dictionary<string, MetaInfo> _meta = new();
+    private readonly Dictionary<string, MetaInfo> _protoMeta = new();
     private readonly Dictionary<string, ProductProto> _productsById = new();
-    public IEnumerable<MetaInfo> Meta => _meta.Values;
     
+    private IEnumerable<MetaInfo>? _metaCached = null;
+    private int _sizeCached = -1;
+    private int _size2Cached = -1;
+
+    public IEnumerable<MetaInfo> Meta
+    {
+        get
+        {
+            if (_metaCached is null || _meta.Count != _sizeCached || _protoMeta.Count != _size2Cached)
+            {
+                _metaCached = _protoMeta.Values.OrderBy(meta => meta.Id).Concat(_meta.Values.OrderBy(meta => meta.Id)).ToArray();
+                _sizeCached = _meta.Count;
+                _size2Cached = _protoMeta.Count;
+            }
+            return _metaCached;
+        }
+    }
+
+
     public IdTracker Ids => ids;
 
     public EntityId? Entity(IEntity? entity)
@@ -47,6 +68,19 @@ public sealed class EntityTracker(IdTracker ids)
         return null;
     }
 
+    public string Proto(IProto proto)
+    {
+        if (!_protoMeta.TryGetValue(proto.Id.Value, out var meta))
+        {
+            _protoMeta[proto.Id.Value] = new MetaInfo(
+                Id: proto.Id.Value,
+                Name: proto.Strings.Name.TranslatedString,
+                Type: null
+            );
+        }
+        return proto.Id.Value;
+    }
+    
     public EntityId MineTower(MineTower mineTower)
     {
         var id = ids.MineTower(mineTower.Id);
@@ -54,8 +88,10 @@ public sealed class EntityTracker(IdTracker ids)
         {
             _meta[id.Value] = new MetaInfo(
                 Id:id.Value,
-                Type:mineTower.DefaultTitle.Value,
+                Type:Proto(mineTower.Prototype),
                 Name:mineTower.CustomTitle.ValueOrNull);
+            
+            ;
         }
         return id;
     }
@@ -66,7 +102,7 @@ public sealed class EntityTracker(IdTracker ids)
         {
             _meta[id.Value] = new MetaInfo(
                 Id:id.Value,
-                Type:fuelStation.DefaultTitle.Value,
+                Type:Proto(fuelStation.Prototype),
                 Name:fuelStation.CustomTitle.ValueOrNull);
         }
         return id;
@@ -78,7 +114,7 @@ public sealed class EntityTracker(IdTracker ids)
         {
             _meta[id.Value] = new MetaInfo(
                 Id:id.Value,
-                Type:machine.DefaultTitle.Value,
+                Type:Proto(machine.Prototype),
                 Name:machine.CustomTitle.ValueOrNull);
         }
         return id;
@@ -91,8 +127,8 @@ public sealed class EntityTracker(IdTracker ids)
         {
             _meta[id.Value] = new MetaInfo(
                 Id:id.Value,
-                Type:vehicle.DefaultTitle.Value,
-                Name:vehicle.CustomTitle.Value);
+                Type:Proto(vehicle.Prototype),
+                Name:vehicle.CustomTitle.ValueOrNull);
         }
         return id;
     }
@@ -101,9 +137,9 @@ public sealed class EntityTracker(IdTracker ids)
     {
         var id=ids.Product(product.Id);
         _productsById[id.Value] = product;
-        if (!_meta.ContainsKey(id.Value))
+        if (!_protoMeta.ContainsKey(id.Value))
         {
-            _meta[id.Value] = new MetaInfo(
+            _protoMeta[id.Value] = new MetaInfo(
                 Id:id.Value,
                 Name:product.Strings.Name.TranslatedString,
                 Type:null
@@ -124,9 +160,9 @@ public sealed class EntityTracker(IdTracker ids)
             return null;
         }
         var id = ids.Recipe(recipe.Id);
-        if (!_meta.ContainsKey(id.Value))
+        if (!_protoMeta.ContainsKey(id.Value))
         {
-            _meta[id.Value] = new MetaInfo(
+            _protoMeta[id.Value] = new MetaInfo(
                 Id:id.Value,
                 Name:recipe.Strings.Name.TranslatedString,
                 Type:null

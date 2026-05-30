@@ -70,7 +70,12 @@ export const VehicleBlockerKinds = [
 ] as const
 
 export type VehicleBlockerKind = typeof VehicleBlockerKinds[number]
-
+export type PressureSummary = {
+  maintenance?: number
+  power?: number
+  computing?: number
+  workers?: number
+}
 export type MachineSummaryRow = {
   machineId: string
   recipeId?: string
@@ -79,10 +84,8 @@ export type MachineSummaryRow = {
   uptimePercent: UptimePercent<ObservedState>
   uptimeTicks: UptimePercent<ObservedState>
 
-  maintenance: number
-  power: number
-  computing: number
-  workers: number
+  electricity: number
+  pressure: PressureSummary
 
   inputs: ProductFlowSummary[]
   outputs: ProductFlowSummary[]
@@ -222,10 +225,8 @@ export type VehicleSummaryRow = {
   blockerPercent: UptimePercent<VehicleBlockerKind>
   blockerTicks: UptimePercent<VehicleBlockerKind>
 
-  maintenance: number
-  power: number
-  computing: number
-  workers: number
+  electricity: number
+  pressure: PressureSummary
 
   emptyTravelDistance: number
   loadedTravelDistance: number

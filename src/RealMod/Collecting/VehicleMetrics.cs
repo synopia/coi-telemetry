@@ -88,7 +88,7 @@ public abstract class VehicleMetrics : BaseMetrics
     protected abstract ObservedState FindState();
     protected virtual VehicleBlockerKind FindBlocker(ObservedState state)
     {
-        using (Profiler.Scope("FindBlocker"))
+        using (SimProfiler.Scope("FindBlocker"))
         {
 
 
@@ -140,7 +140,7 @@ public abstract class VehicleMetrics : BaseMetrics
 
     private void TrackBlocker(VehicleBlockerKind blocker)
     {
-        using (Profiler.Scope("TrackBlocker"))
+        using (SimProfiler.Scope("TrackBlocker"))
         {
             if (blocker == VehicleBlockerKind.None)
             {
@@ -176,17 +176,17 @@ public abstract class VehicleMetrics : BaseMetrics
         }
 
         ObservedState state;
-        using (Profiler.Scope("FindState"))
+        using (SimProfiler.Scope("FindState"))
         {
             state = FindState();
         }
         _lastObservedState = state;
-        using (Profiler.Scope("TrackState"))
+        using (SimProfiler.Scope("TrackState"))
         {
             TrackState(state);
         }
 
-        using (Profiler.Scope("Track and FindBlocker"))
+        using (SimProfiler.Scope("Track and FindBlocker"))
         {
             TrackBlocker(FindBlocker(state));
         }
@@ -254,10 +254,8 @@ public abstract class VehicleMetrics : BaseMetrics
             UptimeTicks: BuildStateCounters(),
             BlockerPercent: MetricMath.Percent(_blockerCounters, ObservedTicks),
             BlockerTicks: _blockerCounters.ToDictionary(x => x.Key, x => x.Value),
-            Maintenance: Maintenance,
-            Power: Power,
-            Computing: Computing,
-            Workers: Workers,
+            Electricity: Electricity,
+            Pressure: new PressureSummary(Maintenance, Power, Computing, Workers),
             DeliveriesCompleted: DeliveriesCompleted,
             EmptyTravelDistance: _distanceEmpty,
             LoadedTravelDistance: _distanceLoaded,
