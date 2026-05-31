@@ -120,7 +120,14 @@ public class MachineMetrics : BaseMetrics
         {
             return true;
         }
-
+        
+        // Multi-tick recipes report progress 0 on the finish/clear tick after outputs are pushed.
+        // That is not a new cycle start and would double-count the recipe.
+        if (progressTicks <= 0)
+        {
+            return false;
+        }
+        
         return progressTicks <= _lastRecipeProgressTicks;
     }
 
