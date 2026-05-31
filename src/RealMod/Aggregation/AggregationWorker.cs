@@ -139,7 +139,8 @@ public sealed class AggregationWorker : IDisposable
                 if (DateTime.UtcNow - _lastDebug > TimeSpan.FromSeconds(10))
                 {
                     _lastDebug = DateTime.UtcNow;
-                    _context.Logger.Info(_profiler.Dump());
+                    // _context.Logger.Info(_profiler.Dump());
+                    _profiler.Dump();
                 }
             }
             catch (Exception e)

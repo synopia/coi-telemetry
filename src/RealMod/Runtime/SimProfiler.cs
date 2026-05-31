@@ -270,7 +270,7 @@ public sealed class ProfilerNode
 
 public static class SimProfiler
 {
-    private static readonly HierarchicalProfiler Instance = new("COI.Mod.SimTick");
+    /*private static readonly HierarchicalProfiler Instance = new("COI.Mod.SimTick");
 
     public static void Reset() => Instance.Reset();
 
@@ -278,8 +278,8 @@ public static class SimProfiler
 
     public static IDisposable Scope(string name) => Instance.Scope(name);
 
-    public static string Dump(int maxDepth = 8) => Instance.Dump(maxDepth);
-    /*
+    public static string Dump(int maxDepth = 8) => Instance.Dump(maxDepth);*/
+    
     private sealed class NoopScope : IDisposable
     {
         public static readonly NoopScope Instance = new();
@@ -293,5 +293,5 @@ public static class SimProfiler
     public static IDisposable Scope(string name) => NoopScope.Instance;
 
     public static string Dump(int maxDepth = 8) => "Profiling disabled.";
-*/
+
 }

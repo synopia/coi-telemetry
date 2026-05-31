@@ -10,6 +10,7 @@ using Mafi;
 using Mafi.Core;
 using Mafi.Core.Entities;
 using Mafi.Core.Entities.Dynamic;
+using Mafi.Core.Prototypes;
 using Mafi.Core.Simulation;
 using Mafi.Serialization;
 
@@ -23,24 +24,21 @@ public sealed class ExportScheduler :  IDisposable
     private readonly IModContext _context;
     private Duration _exportInterval = Duration.FromSec(1);
     private SimStep _lastExport;
-    private LiveDataHub _liveData;
     private ModWebserver _webServer;
     private readonly IEntitiesManager _entitiesManager;
     private readonly AggregationWorker _aggregator ;
     private DateTime _lastDebug = DateTime.UtcNow;
 
     
-    public ExportScheduler(IModContext context, IEntitiesManager entitiesManager,ISimLoopEvents events)
+    public ExportScheduler(IModContext context,ProtosDb db, IEntitiesManager entitiesManager,ISimLoopEvents events, ModWebserver webServer)
     {
         _entitiesManager = entitiesManager;
         _events = events;
         _context = context;
-        _collector = new MetricsCollector(context, entitiesManager, _events);
+        _collector = new MetricsCollector(context, db,entitiesManager, _events);
+        _webServer = webServer;
         
-        _liveData = new LiveDataHub();
-        _aggregator = new(context, _liveData);
-        _webServer = new ModWebserver(context,_liveData);
-        _webServer.Start();
+        _aggregator = new(context, _webServer.LiveData);
     }
 
     public void OnSimulationTick()
@@ -89,7 +87,7 @@ public sealed class ExportScheduler :  IDisposable
         if (DateTime.UtcNow - _lastDebug > TimeSpan.FromSeconds(10))
         {
             _lastDebug = DateTime.UtcNow;
-            _context.Logger.Info(SimProfiler.Dump());
+            // _context.Logger.Info(SimProfiler.Dump());
         }
 
     }
@@ -97,7 +95,6 @@ public sealed class ExportScheduler :  IDisposable
     public void Dispose()
     {
         _aggregator.Dispose();
-        _webServer.Dispose();
         _collector.Dispose();
         
         // _liveData.Dispose();

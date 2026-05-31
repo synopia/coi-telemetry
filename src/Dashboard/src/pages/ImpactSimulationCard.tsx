@@ -1,19 +1,12 @@
 import Card, { CardContent, CardHeader, CardTitle } from '@/components/ui/Card'
-import { LiveSummary, MetaInfo } from '@/api/types.ts'
+import { LiveSummary } from '@/api/types.ts'
+import { MetaInfos } from '@/api/names.ts'
 
-const buildMetaIndex = (metadata: MetaInfo[]) =>
-  new Map(metadata.map((meta) => [meta.id, meta] as const))
-
-const resolveLabel = (metaIndex: Map<string, MetaInfo>, id: string) => {
-  const meta = metaIndex.get(id)
-  return meta?.name ?? meta?.type ?? id
-}
 
 const formatPercent = (value: number) => `${(value * 100).toFixed(0)}%`
 const formatRate = (value: number) => `${value.toFixed(2)}/min`
 
 export const ImpactSimulationCard = ({ summary }: { summary: LiveSummary }) => {
-  const metaIndex = buildMetaIndex(summary.metadata)
   const simulation = summary.window10m.impactSimulation
   const topMachines = simulation.machines
     .filter((machine) => machine.simulatedOutputPerMinute > machine.currentOutputPerMinute + 0.0001)
@@ -64,7 +57,7 @@ export const ImpactSimulationCard = ({ summary }: { summary: LiveSummary }) => {
                     className="border-b border-secondary-100 dark:border-secondary-800 hover:bg-secondary-50 dark:hover:bg-secondary-800/50 transition-colors"
                   >
                     <td className="py-3 px-4">
-                      {resolveLabel(metaIndex, machine.machineId)}
+                      {MetaInfos.getCombinedName(machine.machineId, machine.recipeId)}
                     </td>
                     <td className="py-3 px-4">{machine.primaryBlocker}</td>
                     <td className="py-3 px-4">
@@ -77,7 +70,7 @@ export const ImpactSimulationCard = ({ summary }: { summary: LiveSummary }) => {
                       {machine.limitingProducts.length > 0
                         ? machine.limitingProducts
                             .slice(0, 2)
-                            .map((productId) => resolveLabel(metaIndex, productId))
+                            .map((productId) => MetaInfos.getProduct(productId)?.name)
                             .join(', ')
                         : 'Local only'}
                     </td>
@@ -124,7 +117,7 @@ export const ImpactSimulationCard = ({ summary }: { summary: LiveSummary }) => {
                     className="border-b border-secondary-100 dark:border-secondary-800 hover:bg-secondary-50 dark:hover:bg-secondary-800/50 transition-colors"
                   >
                     <td className="py-3 px-4">
-                      {resolveLabel(metaIndex, constraint.productId)}
+                      {MetaInfos.getName( constraint.productId)}
                     </td>
                     <td className="py-3 px-4">
                       {formatRate(constraint.requestedAdditionalDemandPerMinute)}

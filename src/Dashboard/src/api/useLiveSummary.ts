@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { LiveSummary } from '@/api/types.ts'
+import { MetaInfos } from '@/api/names.ts'
 
 export const useLiveSummary = () => {
   const [summary, setSummary] = useState<LiveSummary | null>(null)
@@ -18,6 +19,7 @@ export const useLiveSummary = () => {
         const json = (await res.json()) as LiveSummary
         if (!cancelled) {
           if(Object.keys(json).length > 0){
+            MetaInfos.update(json.metadata)
             setSummary(json)
             setError(null)
           }

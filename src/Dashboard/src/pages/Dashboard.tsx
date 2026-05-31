@@ -1,4 +1,4 @@
-import Card, { CardContent, CardHeader, CardTitle } from '@/components/ui/Card'
+import Card, { CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/Card'
 import Breadcrumbs from '@/components/layout/Breadcrumbs'
 import { useLiveSummary } from '@/api/useLiveSummary.ts'
 import { BottleneckHeatmapChart, toBottleneckRows } from '@/pages/BottleneckHeatmapChart.tsx'
@@ -94,18 +94,46 @@ export default function Dashboard() {
         {/*<WorstMachines />*/}
       </div>
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
-        {/* Revenue Chart */}
         <Card>
           <CardHeader>
             <CardTitle>Net amount chart</CardTitle>
+            <CardDescription>under producing</CardDescription>
           </CardHeader>
           <CardContent>
-            {summary&&<NetAmountChart summary={summary}/>}
+            {summary && (
+              <NetAmountChart
+                summary={summary.window10m}
+                type={'asc'}
+                maxProducts={15}
+              />
+            )}
           </CardContent>
         </Card>
-
-        {/* Profit vs Expenses */}
-        {summary && <DependencyOpportunities summary={summary} />}
+        <Card>
+          <CardHeader>
+            <CardTitle>Net amount chart</CardTitle>
+            <CardDescription>over producing</CardDescription>
+          </CardHeader>
+          <CardContent>
+            {summary && (
+              <NetAmountChart
+                summary={summary.window10m}
+                type={'desc'}
+                maxProducts={15}
+              />
+            )}
+          </CardContent>
+        </Card>
+      </div>
+      <div className="grid grid-cols-1 lg:grid-cols-1 gap-6 mb-6">
+        <Card>
+          <CardHeader>
+            <CardTitle>Dependency Opportunities</CardTitle>
+          </CardHeader>
+          <CardContent>
+            {summary && <DependencyOpportunities summary={summary} />}
+          </CardContent>
+        </Card>
       </div>
       <div className="grid grid-cols-1 lg:grid-cols-1 gap-6 mb-6">
         {summary && <ImpactSimulationCard summary={summary} />}
@@ -118,8 +146,7 @@ export default function Dashboard() {
           <CardHeader>
             <CardTitle>Recent Orders</CardTitle>
           </CardHeader>
-          <CardContent>
-          </CardContent>
+          <CardContent></CardContent>
         </Card>
 
         {/* Top Products */}
@@ -128,8 +155,7 @@ export default function Dashboard() {
             <CardTitle>Top Products</CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="space-y-4">
-            </div>
+            <div className="space-y-4"></div>
           </CardContent>
         </Card>
       </div>

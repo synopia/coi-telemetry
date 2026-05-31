@@ -1,12 +1,13 @@
 
-export type MetaInfo = {
-  id: string
-  type?: string
-  name?: string
+export type Metadata = {
+  protos:Record<string, {name: string}>
+  products:Record<string, {name: string, iconUrl: string}>
+  entities:Record<string, { name: string, protoId: string }>
+  recipes:Record<string, { name: string }>
 }
 
 export type LiveSummary = {
-  metadata: MetaInfo[]
+  metadata: Metadata
   window10s: ExportSummary,
   window1m: ExportSummary,
   window5m: ExportSummary,

@@ -1,7 +1,8 @@
 
 
   import EChartsReact from 'echarts-for-react'
-  import { LiveSummary } from '@/api/types.ts'
+  import {  LiveSummary } from '@/api/types.ts'
+  import {  MetaInfos } from '@/api/names.ts'
 
   type BottleneckRow = {
     id: string
@@ -96,10 +97,6 @@ function bottleneckScore(row: BottleneckRow) {
   return hardStops+softPressure+productionProblems
 
 }
-const pressureFromAvailableRatio = (ratio: number|null|undefined) => {
-  if( ratio==null||!Number.isFinite(ratio) ) return null
-  return Math.max(0, Math.min(100, (1-ratio)*100))
-}
 const percentFromRatio = (ratio: number|null|undefined) => {
   if( ratio==null||!Number.isFinite(ratio) ) return 0
   return Math.max(0, Math.min(100, ratio*100))
@@ -108,7 +105,7 @@ export function toBottleneckRows(summary:LiveSummary, window:"10s"|"1m"|"5m"|"10
   const w = summary[`window${window}`]
   const machineRows: BottleneckRow[] = w.machines.map((m) => ({
     id: m.machineId,
-    label: m.machineId,
+    label: MetaInfos.getCombinedName(m.machineId, m.recipeId),
     kind: 'machine',
 
     workingPercent: percentFromRatio(m.uptimePercent.working),
@@ -134,7 +131,7 @@ export function toBottleneckRows(summary:LiveSummary, window:"10s"|"1m"|"5m"|"10
   }))
   const vehicleRows: BottleneckRow[] = w.vehicles.map((v) => ({
     id: v.vehicleId,
-    label: v.vehicleId,
+    label: MetaInfos.getCombinedName(v.vehicleId, v.assignedTo),
     kind: 'vehicle',
     workingPercent: percentFromRatio(v.uptimePercent.working),
     idlePercent: percentFromRatio(v.uptimePercent.idle),
@@ -218,6 +215,7 @@ export function BottleneckHeatmapChart({rows, maxRows=20}:{rows: BottleneckRow[]
       type: 'category',
       data: columns.map((c) => c.label),
       splitArea: { show: true },
+      position:"top"
     },
     yAxis: {
       type: 'category',

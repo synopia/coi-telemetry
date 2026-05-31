@@ -28,7 +28,7 @@ public sealed record SummaryMeta(
     );
 
 public sealed record ExportSummary(
-    IReadOnlyList<MetaInfo>? Metadata,
+    Metadata? Metadata,
     SummaryMeta Meta,
     IReadOnlyList<MachineSummaryRow> Machines,
     IReadOnlyList<VehicleSummaryRow> Vehicles,

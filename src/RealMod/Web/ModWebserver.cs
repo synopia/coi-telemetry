@@ -1,9 +1,14 @@
 using System;
+using System.Drawing;
+using System.Drawing.Imaging;
 using System.IO;
 using System.Net;
+using System.Runtime.InteropServices;
 using System.Text;
 using System.Threading;
 using CoiTelemetry.Abstractions;
+using Mafi.Unity;
+using UnityEngine;
 
 namespace CoiTelemetry.RealMod.Web;
 
@@ -13,13 +18,16 @@ public class ModWebserver:IDisposable
     private readonly HttpListener _listener;
     private readonly Thread _thread;
     private readonly IModContext _context;
-    
+    private readonly AssetsDb _assetsDb;
     private volatile bool _running;
 
-    public ModWebserver(IModContext context,LiveDataHub liveData, int port=17891)
+    public LiveDataHub LiveData => _liveData;
+    
+    public ModWebserver(IModContext context,AssetsDb assetsDb, int port=17891)
     {
         _context = context;
-        _liveData = liveData;
+        _assetsDb = assetsDb;
+        _liveData = new LiveDataHub();
         _listener = new HttpListener();
         _listener.Prefixes.Add($"http://localhost:{port}/");
 
@@ -47,22 +55,26 @@ public class ModWebserver:IDisposable
                 var context = _listener.GetContext();
                 HandleRequest(context);
             }
-            catch (HttpListenerException)
+            catch (HttpListenerException e)
             {
+                _context.Logger.Info(e.Message);
                 if (_running) throw;
             }
-            catch (ObjectDisposedException)
+            catch (ObjectDisposedException e)
             {
+                _context.Logger.Info(e.Message);
                 return;
             }
             catch (Exception e)
             {
+                _context.Logger.Info(e.Message);
                 SafeLog(e);
             }
         }
     }
     private void HandleRequest(HttpListenerContext context)
     {
+        _context.Logger.Info("Handling request");
         var request = context.Request;
         var response = context.Response;
         AddCorsHeaders(response);
@@ -74,10 +86,11 @@ public class ModWebserver:IDisposable
         }
 
         var path = request.Url?.AbsolutePath;
-        if (path?.StartsWith("/api/entity/") == true)
+        if (path?.StartsWith("/Assets") == true)
         {
-            _liveData.RequestEntity = path.Substring(12);
-            WriteJson(response, $"{{\"c\":\"{_liveData.ResponseEntity??""}\"}}");
+            Texture2D data = _assetsDb.GetSharedTexture(path.Substring(1));
+            WriteBinary(response, data.EncodeToPNG());
+            return;
         }
         switch (path)
         {
@@ -101,6 +114,16 @@ public class ModWebserver:IDisposable
         var bytes = Encoding.UTF8.GetBytes(json);
         response.StatusCode = 200;
         response.ContentType="application/json";
+        response.ContentLength64 = bytes.Length;
+        
+        response.OutputStream.Write(bytes, 0, bytes.Length);
+        response.OutputStream.Close();
+    }
+
+    private static void WriteBinary(HttpListenerResponse response, byte[] bytes)
+    {
+        response.StatusCode = 200;
+        response.ContentType="image/png";
         response.ContentLength64 = bytes.Length;
         
         response.OutputStream.Write(bytes, 0, bytes.Length);

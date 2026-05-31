@@ -1,7 +1,6 @@
 using System.Threading;
 using CoiTelemetry.RealMod.Contracts.Dtos;
 using Newtonsoft.Json;
-using Newtonsoft.Json.Linq;
 using Newtonsoft.Json.Serialization;
 
 namespace CoiTelemetry.RealMod.Web;
@@ -10,8 +9,6 @@ public sealed class LiveDataHub
 {
     private string _latestSummaryJson = "{}";
     private long _version;
-    public string? RequestEntity { get; set; }
-    public string? ResponseEntity { get; set; }
 
     private static readonly JsonSerializerSettings PrettySettings = new()
     {

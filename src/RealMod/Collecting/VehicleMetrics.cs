@@ -21,7 +21,7 @@ namespace CoiTelemetry.RealMod.Collecting;
 
 public abstract class VehicleMetrics : BaseMetrics
 {
-    public static VehicleMetrics Create(IModContext context, EntityTracker tracker,
+    public static VehicleMetrics Create(IModContext context, MetaTracker tracker,
         IProductFlowMetrics productFlowMetrics, Vehicle vehicle)
     {
         if (vehicle is Truck truck)
@@ -66,10 +66,10 @@ public abstract class VehicleMetrics : BaseMetrics
     protected bool IsDelivering { get; init; } = false;
     protected bool IsProducing { get; init; } = false;
 
-    public VehicleMetrics(IModContext context, IProductFlowMetrics productFlowMetrics, EntityTracker tracker, Vehicle vehicle):base(context, productFlowMetrics, tracker, vehicle)
+    public VehicleMetrics(IModContext context, IProductFlowMetrics productFlowMetrics, MetaTracker tracker, Vehicle vehicle):base(context, productFlowMetrics, tracker, vehicle)
     {
         _vehicle = vehicle;
-        _vehicleId = Tracker.Vehicle(vehicle);
+        _vehicleId = Tracker.Entity(vehicle.Id);
 
         _totalDistance = vehicle.LifetimeDistanceTraveled.RawValue;
     }
@@ -79,7 +79,7 @@ public abstract class VehicleMetrics : BaseMetrics
         var it = cargo.GetEnumerator();
         while (it.MoveNext())
         {
-            var productId = Tracker.Product(it.Current.Key);
+            var productId = Tracker.Product(it.Current.Key.Id);
             _cargo.Set(productId, it.Current.Value.Value);
         }
     }
@@ -155,7 +155,7 @@ public abstract class VehicleMetrics : BaseMetrics
     protected override void ObserveState()
     {
         var assignedTo = _vehicle.AssignedTo.ValueOrNull;
-        AssignedToId = Tracker.Entity(assignedTo);
+        AssignedToId = assignedTo!=null ? Tracker.Entity(assignedTo.Id) : null;
         var goal = _vehicle.NavigationGoal.ValueOrNull;
         CurrentGoal = goal?.GoalName.Value;
 
@@ -303,7 +303,7 @@ public abstract class VehicleMetrics : BaseMetrics
 
     protected void UpdateCargo(ProductQuantity productQuantity)
     {
-        var productId = Tracker.Product(productQuantity.Product);
+        var productId = Tracker.Product(productQuantity.Product.Id);
         _cargo.Set(productId, productQuantity.Quantity.Value);
     }
 
@@ -350,7 +350,7 @@ public sealed class TruckMetrics : VehicleMetrics
 {
     private Truck _truck;
     
-    public TruckMetrics(IModContext context,  IProductFlowMetrics productFlowMetrics,EntityTracker tracker, Truck truck) : base(context, productFlowMetrics, tracker, truck)
+    public TruckMetrics(IModContext context,  IProductFlowMetrics productFlowMetrics,MetaTracker tracker, Truck truck) : base(context, productFlowMetrics, tracker, truck)
     {
         _truck = truck;
         IsDelivering = true;
@@ -416,7 +416,7 @@ public sealed class TruckMetrics : VehicleMetrics
 public sealed class ExcavatorMetrics : VehicleMetrics
 {
     private Excavator _excavator;
-    public ExcavatorMetrics(IModContext context, IProductFlowMetrics productFlowMetrics, EntityTracker tracker, Excavator excavator) : base(context, productFlowMetrics, tracker, excavator)
+    public ExcavatorMetrics(IModContext context, IProductFlowMetrics productFlowMetrics, MetaTracker tracker, Excavator excavator) : base(context, productFlowMetrics, tracker, excavator)
     {
         _excavator = excavator;
         IsProducing = true;
@@ -465,7 +465,7 @@ public sealed class TreeHarvesterMetrics : VehicleMetrics
 {
     private TreeHarvester _treeHarvester;
 
-    public TreeHarvesterMetrics(IModContext context, IProductFlowMetrics productFlowMetrics, EntityTracker tracker,
+    public TreeHarvesterMetrics(IModContext context, IProductFlowMetrics productFlowMetrics, MetaTracker tracker,
         TreeHarvester treeHarvester) : base(context, productFlowMetrics, tracker, treeHarvester)
     {
         _treeHarvester = treeHarvester;
@@ -512,7 +512,7 @@ public sealed class GenericVehicleMetrics : VehicleMetrics
     public GenericVehicleMetrics(
         IModContext context,
         IProductFlowMetrics productFlowMetrics,
-        EntityTracker tracker,
+        MetaTracker tracker,
         Vehicle vehicle) : base(context, productFlowMetrics, tracker, vehicle)
     {
     }

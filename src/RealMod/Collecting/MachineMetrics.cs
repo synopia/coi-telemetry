@@ -28,16 +28,16 @@ public class MachineMetrics : BaseMetrics
     private bool _hasCycleObservation;
     
     
-    public MachineMetrics(IModContext context, EntityTracker tracker, IProductFlowMetrics productFlowMetrics,Machine machine):base(context, productFlowMetrics,tracker, machine)
+    public MachineMetrics(IModContext context, MetaTracker tracker, IProductFlowMetrics productFlowMetrics,Machine machine):base(context, productFlowMetrics,tracker, machine)
     {
         _machine = machine;
-        _machineId = Tracker.Machine(machine);
+        _machineId = Tracker.Entity(machine.Id);
     }
 
     protected override void ObserveState()
     {
         var recipe = _machine.LastRecipeInProgress.ValueOrNull;
-        RecipeId = Tracker.Recipe(recipe);
+        RecipeId = Tracker.Recipe(recipe.Id);
         _recipeProto = recipe;
         
         TrackState(FindState());
@@ -76,7 +76,7 @@ public class MachineMetrics : BaseMetrics
     
     private ProductBufferSummary BuildProductBuffer(Machine machine, ProductProto product, bool isInput = true)
     {
-        var id = Tracker.Product(product);
+        var id = Tracker.Product(product.Id);
         var capacity = isInput ? machine.GetInputCapacityFor(product).Value : machine.GetOutputCapacityFor(product).Value;
         var stored = isInput ? machine.GetInputQuantityFor(product).Value : machine.GetOutputQuantityFor(product).Value;
         var fillPercent = capacity<=0 ? 0 : stored * 100.0 / capacity;
@@ -135,7 +135,7 @@ public class MachineMetrics : BaseMetrics
                 var consumed = input.Quantity.ScaledBy(utilization);
                 if (consumed.IsPositive)
                 {
-                    AddConsumed(Tracker.Product(input.Product), consumed.Value);
+                    AddConsumed(Tracker.Product(input.Product.Id), consumed.Value);
                 }
             }
 
@@ -144,7 +144,7 @@ public class MachineMetrics : BaseMetrics
                 var produced = output.Quantity.ScaledBy(utilization);
                 if (produced.IsPositive)
                 {
-                    AddProduced(Tracker.Product(output.Product), produced.Value);
+                    AddProduced(Tracker.Product(output.Product.Id), produced.Value);
                 }
             }
 
@@ -158,7 +158,7 @@ public class MachineMetrics : BaseMetrics
 
                 if (produced.IsPositive)
                 {
-                    AddProduced(Tracker.Product(output.Product), produced.Value);
+                    AddProduced(Tracker.Product(output.Product.Id), produced.Value);
                 }
             }
         }
@@ -263,7 +263,7 @@ public class MachineMetrics : BaseMetrics
 
     private ProductFlowSummary BuildPotentialFlow(ProductProto product, double quantityPerCycle, Duration cycleDuration, double factor)
     {
-        var productId = Tracker.Product(product);
+        var productId = Tracker.Product(product.Id);
         var cycleSeconds = cycleDuration.Seconds.ToDouble();
         var perMinuteAtFullCapacity = MetricMath.PerMinute(quantityPerCycle, cycleSeconds);
         var perMinute = perMinuteAtFullCapacity * factor;

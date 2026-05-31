@@ -1,26 +1,14 @@
-import Card, { CardContent, CardHeader, CardTitle } from '@/components/ui/Card'
-import { LiveSummary, MetaInfo } from '@/api/types.ts'
+
+import { LiveSummary } from '@/api/types.ts'
+import { MetaInfos } from '@/api/names.ts'
 
 const formatRate = (value: number) => value.toFixed(2)
 
-const buildMetaIndex = (metadata: MetaInfo[]) =>
-  new Map(metadata.map((meta) => [meta.id, meta] as const))
-
-const resolveLabel = (metaIndex: Map<string, MetaInfo>, id: string) => {
-  const meta = metaIndex.get(id)
-  return meta?.name ?? meta?.type ?? id
-}
-
 export const DependencyOpportunities = ({ summary }: { summary: LiveSummary }) => {
-  const metaIndex = buildMetaIndex(summary.metadata)
   const opportunities = summary.window10m.dependencyGraph.opportunities.slice(0, 8)
 
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle>Dependency Opportunities</CardTitle>
-      </CardHeader>
-      <CardContent>
+    <>
         {opportunities.length === 0 ? (
           <p className="text-secondary-600 dark:text-secondary-400">
             No local graph headroom detected in the current 10 minute window.
@@ -56,13 +44,15 @@ export const DependencyOpportunities = ({ summary }: { summary: LiveSummary }) =
                   className="border-b border-secondary-100 dark:border-secondary-800 hover:bg-secondary-50 dark:hover:bg-secondary-800/50 transition-colors"
                 >
                   <td className="py-3 px-4">
-                    {resolveLabel(metaIndex, opportunity.productId)}
+                    {MetaInfos.getName(opportunity.productId)}
                   </td>
                   <td className="py-3 px-4">
-                    {formatRate(opportunity.localProductionHeadroomPerMinute)}/min
+                    {formatRate(opportunity.localProductionHeadroomPerMinute)}
+                    /min
                   </td>
                   <td className="py-3 px-4">
-                    {formatRate(opportunity.downstreamDemandHeadroomPerMinute)}/min
+                    {formatRate(opportunity.downstreamDemandHeadroomPerMinute)}
+                    /min
                   </td>
                   <td
                     className={
@@ -85,7 +75,6 @@ export const DependencyOpportunities = ({ summary }: { summary: LiveSummary }) =
             </tbody>
           </table>
         )}
-      </CardContent>
-    </Card>
+      </>
   )
 }

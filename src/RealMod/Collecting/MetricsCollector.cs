@@ -10,6 +10,7 @@ using Mafi.Core.Entities;
 using Mafi.Core.Entities.Dynamic;
 using Mafi.Core.Factory.Machines;
 using Mafi.Core.Products;
+using Mafi.Core.Prototypes;
 using Mafi.Core.Simulation;
 
 namespace CoiTelemetry.RealMod.Collecting;
@@ -17,7 +18,7 @@ namespace CoiTelemetry.RealMod.Collecting;
 public sealed class MetricsCollector : IProductFlowMetrics, IDisposable
 {
     private readonly IModContext _context;
-    private readonly EntityTracker _tracker;
+    private readonly MetaTracker _tracker;
     private readonly IEntitiesManager _entitiesManager;
     private readonly ISimLoopEvents _events;
     private readonly IProductsManager _productsManager;
@@ -31,13 +32,13 @@ public sealed class MetricsCollector : IProductFlowMetrics, IDisposable
     private bool _vehicleSnapshotDirty = true;
     private int _windowObservedTicks;
     
-    public MetricsCollector(IModContext context, IEntitiesManager entitiesManager, ISimLoopEvents events)
+    public MetricsCollector(IModContext context,ProtosDb db, IEntitiesManager entitiesManager, ISimLoopEvents events)
     {
         _context = context;
         _entitiesManager = entitiesManager;
         _events = events;
         _productsManager = context.Resolver.Resolve<IProductsManager>();
-        _tracker = new EntityTracker(new IdTracker());
+        _tracker = new MetaTracker(db,entitiesManager);
 
         InitializeTrackedEntities();
         _entitiesManager.EntityAdded.AddNonSaveable(this, OnEntityAdded);
@@ -126,7 +127,7 @@ public sealed class MetricsCollector : IProductFlowMetrics, IDisposable
         }
 
         return new ExportSummary(
-            Metadata:includeMetadata ? BuildMetadata() : Array.Empty<MetaInfo>(),
+            Metadata:includeMetadata ? _tracker.BuildMetadata() : null,
             Meta: meta,
             Machines: machineSummaries,
             Vehicles: vehicleSummaries,
@@ -134,13 +135,6 @@ public sealed class MetricsCollector : IProductFlowMetrics, IDisposable
             DependencyGraph: dependencyGraph,
             ImpactSimulation: impactSimulation
             );
-    }
-
-    public IReadOnlyList<MetaInfo> BuildMetadata()
-    {
-        return _tracker.Meta
-            .OrderBy(meta => meta.Id)
-            .ToArray();
     }
 
     private IEnumerable<MachineSummaryRow> BuildMachineSummaries()

@@ -21,7 +21,7 @@ namespace CoiTelemetry.RealMod.Collecting;
 public abstract class BaseMetrics
 {
     protected readonly IModContext Context;
-    protected readonly EntityTracker Tracker;
+    protected readonly MetaTracker Tracker;
     private readonly IProductFlowMetrics _flowMetrics;
     private readonly Entity _entity;
     private bool _hasObservedStep;
@@ -42,7 +42,7 @@ public abstract class BaseMetrics
     private readonly Dictionary<ProductId, double> _producedByProduct = new();
     private readonly Dictionary<ProductId, double> _consumedByProduct = new();
     
-    protected BaseMetrics(IModContext context,IProductFlowMetrics flowMetrics, EntityTracker tracker, Entity entity)
+    protected BaseMetrics(IModContext context,IProductFlowMetrics flowMetrics, MetaTracker tracker, Entity entity)
     {
         Context = context;
         _flowMetrics = flowMetrics;
@@ -134,7 +134,7 @@ public abstract class BaseMetrics
                 }
                 
                 var costs = maintainedEntity.MaintenanceCosts;
-                AddConsumed(Tracker.Ids.Product(costs.Product.Id), costs.MaintenancePerMonth.Value.ToDouble()/Duration.OneMonth.Ticks);
+                AddConsumed(Tracker.Product(costs.Product.Id), costs.MaintenancePerMonth.Value.ToDouble()/Duration.OneMonth.Ticks);
             }
         }
 
@@ -154,7 +154,7 @@ public abstract class BaseMetrics
                         TrackState(ObservedState.NotEnoughPower);
                     }
 
-                    Usage.Set(Tracker.Product(fuelTank.Proto.Product),
+                    Usage.Set(Tracker.Product(fuelTank.Proto.Product.Id),
                         (double)fuelTank.RemainingDuration.Ticks / fuelTank.Proto.OneQuantityDuration.Ticks);
                 }
             }
@@ -199,7 +199,7 @@ public abstract class BaseMetrics
 
                 if (Computing is not null)
                 {
-                    Usage.Set(Tracker.Ids.Product(Ids.Products.Computing), (double)Computing);
+                    Usage.Set(Tracker.Product(Ids.Products.Computing), (double)Computing);
                 }
             }
         }
